@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using JuegoFramework.Helpers;
 using System.Text.Json;
-using JuegoFramework.Controllers.Dto;
 
 namespace JuegoFramework.Controllers
 {
