@@ -3,12 +3,13 @@ using System.Reflection;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace JuegoFramework.Helpers
 {
     public class RouteExecutor
     {
-        public static Task<IActionResult> Execute(string method, string route, string bodyJSON, string? accessToken = null)
+        public static async Task<IActionResult> Execute(string method, string route, string bodyJSON, string? accessToken = null)
         {
             var routeFound = Global.EndpointSources!
             .SelectMany(es => es.Endpoints)
@@ -39,6 +40,48 @@ namespace JuegoFramework.Helpers
                 controller.ControllerContext.HttpContext.Request.Headers.Append("access_token", accessToken);
             }
 
+            var authAttributes = controllerMetadata.MethodInfo.DeclaringType?
+                .GetCustomAttributes<TypeFilterAttribute>(true)
+                .Where(attr => attr.ImplementationType == typeof(UserAuth))
+                .Concat(
+                    controllerMetadata.MethodInfo
+                    .GetCustomAttributes<TypeFilterAttribute>(true)
+                    .Where(attr => attr.ImplementationType == typeof(UserAuth))
+                );
+
+            if (authAttributes != null)
+            {
+                foreach (var authAttribute in authAttributes)
+                {
+                    // Create a new scope for resolving the service
+                    using (var scope = Global.ServiceProvider!.CreateScope())
+                    {
+                        var scopedProvider = scope.ServiceProvider;
+                        var authInstance = (IFilterMetadata)scopedProvider.GetRequiredService(authAttribute.ImplementationType);
+
+                        var authFilterContext = new AuthorizationFilterContext(
+                            new ActionContext(controller.ControllerContext.HttpContext, new RouteData(), controllerMetadata),
+                            new IFilterMetadata[] { authInstance }
+                        );
+
+                        // Cast to IAsyncAuthorizationFilter or IAuthorizationFilter
+                        if (authInstance is IAsyncAuthorizationFilter asyncAuthFilter)
+                        {
+                            await asyncAuthFilter.OnAuthorizationAsync(authFilterContext);
+                        }
+                        else if (authInstance is IAuthorizationFilter syncAuthFilter)
+                        {
+                            syncAuthFilter.OnAuthorization(authFilterContext);
+                        }
+
+                        if (authFilterContext.Result != null)
+                        {
+                            return authFilterContext.Result;
+                        }
+                    }
+                }
+            }
+
             var parameterInfo = methodInfo.GetParameters().FirstOrDefault();
 
             object[] parameters = [];
@@ -53,7 +96,7 @@ namespace JuegoFramework.Helpers
 
             var result = methodInfo.Invoke(controller, parameters) as Task<IActionResult>;
 
-            return result ?? throw new Exception("Route method invocation returned null");
+            return result?.Result ?? throw new Exception("Route method invocation returned null");
         }
     }
 }

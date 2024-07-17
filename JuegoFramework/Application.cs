@@ -35,6 +35,8 @@ public static class Application
 
         builder.Services.AddScoped<WebSocketService>();
 
+        builder.Services.AddScoped<UserAuth>();
+
         builder.Services.AddControllers();
 
         builder.Services.AddEndpointsApiExplorer();

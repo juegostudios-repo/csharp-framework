@@ -9,7 +9,8 @@ namespace API.Models
         [JsonPropertyName("type")]
         public required short Type { get; set; }
 
+        [Required]
         [JsonPropertyName("user_name")]
-        public string? UserName { get; set; }
+        public required string UserName { get; set; }
     }
 }

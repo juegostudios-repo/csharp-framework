@@ -7,6 +7,19 @@ namespace JuegoFramework.Helpers
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
     public class UserAuth : Attribute, IAsyncAuthorizationFilter
     {
+
+        private readonly ILoginService? _loginService;
+
+        public UserAuth(ILoginService loginService)
+        {
+            _loginService = loginService;
+        }
+
+        public UserAuth()
+        {
+            _loginService = null;
+        }
+
         public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
         {
             if (context.HttpContext.Request.Headers["access_token"] == StringValues.Empty)
@@ -25,7 +38,12 @@ namespace JuegoFramework.Helpers
 
             if (Global.Configuration!["AUTH:AUTH_MODE"] == "JWT_SQL")
             {
-                var loginService = context.HttpContext.RequestServices.GetService(typeof(ILoginService)) as ILoginService ?? throw new InvalidOperationException("Unable to find user login service.");
+                var loginService = _loginService != null ? _loginService : context.HttpContext.RequestServices.GetService(typeof(ILoginService)) as ILoginService;
+
+                if (loginService == null)
+                {
+                    throw new InvalidOperationException("Unable to find user login service.");
+                }
 
                 var userInDb = await loginService.ValidateAuthData(authData);
 

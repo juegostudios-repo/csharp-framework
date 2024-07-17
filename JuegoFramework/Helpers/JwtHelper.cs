@@ -46,7 +46,7 @@ namespace JuegoFramework.Helpers
                 }, out SecurityToken validatedToken);
 
                 var jwtToken = (JwtSecurityToken)validatedToken;
-                var userData = int.Parse(jwtToken.Claims.First(x => x.Type == configuration["AUTH:JWT_ID_KEY"]).Value);
+                var userData = jwtToken.Claims.First(x => x.Type == configuration["AUTH:JWT_ID_KEY"]).Value;
 
                 // return account id from JWT token if validation successful
                 return new JwtObject() { Data = userData, AccessToken = token };

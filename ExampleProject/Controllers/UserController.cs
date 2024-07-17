@@ -11,7 +11,6 @@ namespace API.Controllers
     [Response]
     public class UserController : ControllerBase
     {
-        private readonly PasswordHasher<TClass> _passwordHasher = new();
         private readonly JsonSerializerOptions _options = new() { WriteIndented = true };
 
         [HttpPost("login")]
@@ -21,7 +20,8 @@ namespace API.Controllers
             try
             {
                 await Task.CompletedTask;
-                return ApiResponse.setResponse("SUCCESS", new { });
+                string accessToken = JwtHelper.GenerateJwtToken(data.UserName);
+                return ApiResponse.setResponse("SUCCESS", new { access_token = accessToken });
             }
             catch (Exception e)
             {
@@ -31,7 +31,7 @@ namespace API.Controllers
         }
 
         [HttpPost("logout")]
-        [UserAuth]
+        [TypeFilter(typeof(UserAuth))]
         [Consumes("application/x-www-form-urlencoded", "application/json")]
         public async Task<IActionResult> Logout()
         {
@@ -47,11 +47,6 @@ namespace API.Controllers
             }
         }
 
-
-    }
-
-    public class TClass
-    {
 
     }
 }
