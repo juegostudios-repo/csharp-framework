@@ -1,0 +1,34 @@
+version: '3'
+
+services:
+  638-example-project-v1:
+    image: 638-example-project-00-00-01
+    container_name: 638-example-project-v1
+    env_file:
+      - .env
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ap-south-1
+        awslogs-group: "/team2/docker-logs/"
+        awslogs-stream: "team2/docker-logs/638-example-project-00-00-01"
+        awslogs-multiline-pattern: "\\[.*\\ (INF|ERR|DBG)]"
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+
+  638-example-project-CRON-v1:
+    image: 638-example-project-00-00-01
+    container_name: 638-example-project-CRON-v1
+    environment:
+      - MODE=CRON
+    env_file:
+      - .env
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ap-south-1
+        awslogs-group: "/team2/docker-logs/"
+        awslogs-stream: "team2/docker-logs/638-example-project-CRON-00-00-01"
+        awslogs-multiline-pattern: "\\[.*\\ (INF|ERR|DBG)]"
+    restart: unless-stopped
