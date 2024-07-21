@@ -120,7 +120,7 @@ public static class Application
             app.UseSwaggerUI();
         }
 
-        if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") != "AWS" && Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") != "AZURE")
+        if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "SERVER")
         {
             app.UseWebSockets();
             app.UseMiddleware<WebSocketMiddleware>();
@@ -140,6 +140,14 @@ public static class Application
         Global.Environment = app.Environment;
         Global.BaseResponse = JsonSerializer.Deserialize<Dictionary<string, ResponseJson>>(File.ReadAllText(@"Globals/response.json")) ?? throw new Exception("Error reading Globals/response.json file");
         Global.ConnectionString = app.Configuration.GetConnectionString("DefaultConnection");
+
+        if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "SERVER")
+        {
+            if (Environment.GetEnvironmentVariable("SERVER_WEBSOCKET_HTTP_PORT") == null)
+            {
+                throw new Exception("SERVER_WEBSOCKET_HTTP_PORT is not defined in the environment variables");
+            }
+        }
 
         if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "AWS")
         {

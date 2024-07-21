@@ -81,8 +81,14 @@ namespace JuegoFramework.Helpers
             var messageJson = JsonSerializer.Serialize(message);
             var buffer = Encoding.UTF8.GetBytes(messageJson);
 
-            if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") != "AWS" && Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") != "AZURE")
+            if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "SERVER")
             {
+                if (Environment.GetEnvironmentVariable("MODE") == "CRON")
+                {
+                    await APIWebSocket.SendMessageAsync(connectionId, buffer);
+                    return;
+                }
+
                 if (SocketConnections.TryGetValue(connectionId, out var socket))
                 {
                     if (socket.State != WebSocketState.Open)
