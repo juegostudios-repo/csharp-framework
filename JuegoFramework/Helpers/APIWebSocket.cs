@@ -8,7 +8,7 @@ namespace JuegoFramework.Helpers
     {
         private static readonly string serverWebsocketHttpPort = Environment.GetEnvironmentVariable("SERVER_WEBSOCKET_HTTP_PORT") ?? "";
 
-        public static async Task SendMessageAsync(string connectionId, object message)
+        public static async Task SendMessageAsync(string connectionId, byte[] buffer)
         {
             Guid requestId = Guid.NewGuid();
 
@@ -27,6 +27,7 @@ namespace JuegoFramework.Helpers
 
             try
             {
+                string message = Encoding.UTF8.GetString(buffer);
                 var jsonString = JsonSerializer.Serialize(new { connection_id = connectionId, message = message });
                 var content = new StringContent(jsonString, Encoding.UTF8, "application/json");
 
