@@ -11,7 +11,7 @@ namespace JuegoFramework.Controllers
         [HttpPost]
         public async Task<IActionResult> Post(APIWebSocketRequestDto request)
         {
-            await WebSocketService.SendMessageToSocket(request.ConnectionId, request.Message);
+            await WebSocketService.SendMessageToSocket(request.ConnectionId, request.Message, true);
             return Ok();
         }
     }

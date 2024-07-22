@@ -76,9 +76,9 @@ namespace JuegoFramework.Helpers
             }
         }
 
-        public static async Task SendMessageToSocket(string connectionId, object message)
+        public static async Task SendMessageToSocket(string connectionId, object message, bool skipJsonSerialization = false)
         {
-            var messageJson = JsonSerializer.Serialize(message);
+            var messageJson = !skipJsonSerialization ? JsonSerializer.Serialize(message) : (string)message;
             var buffer = Encoding.UTF8.GetBytes(messageJson);
 
             if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "SERVER")
