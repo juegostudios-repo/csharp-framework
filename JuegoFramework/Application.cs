@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using JuegoFramework.Helpers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.OpenApi.Models;
 
 public static class Application
 {
@@ -116,7 +117,19 @@ public static class Application
 
         if (app.Environment.IsDevelopment())
         {
-            app.UseSwagger();
+            string basePath = Environment.GetEnvironmentVariable("BASE_PATH") ?? "";
+            if (!string.IsNullOrEmpty(basePath) && !basePath.StartsWith("/"))
+            {
+                basePath = $"/{basePath}";
+            }
+
+            app.UseSwagger(c =>
+            {
+                c.PreSerializeFilters.Add((swaggerDoc, httpReq) =>
+                {
+                    swaggerDoc.Servers = new List<OpenApiServer> { new OpenApiServer { Url = $"{httpReq.Scheme}://{httpReq.Host.Value}{basePath}" } };
+                });
+            });
             app.UseSwaggerUI();
         }
 
