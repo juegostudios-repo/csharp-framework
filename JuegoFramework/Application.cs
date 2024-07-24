@@ -109,6 +109,18 @@ public static class Application
         return builder;
     }
 
+    public static void ValidateEnvs(params string[] requiredVars)
+    {
+        var missingVars = requiredVars
+            .Where(var => string.IsNullOrEmpty(Environment.GetEnvironmentVariable(var)))
+            .ToList();
+
+        if (missingVars.Count > 0)
+        {
+            throw new Exception($"The following environment variables are not defined: {string.Join(", ", missingVars)}");
+        }
+    }
+
     public static WebApplication InitApp(WebApplicationBuilder builder)
     {
         var app = builder.Build();
@@ -156,51 +168,17 @@ public static class Application
 
         if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "SERVER")
         {
-            if (Environment.GetEnvironmentVariable("SERVER_WEBSOCKET_HTTP_PORT") == null)
-            {
-                throw new Exception("SERVER_WEBSOCKET_HTTP_PORT is not defined in the environment variables");
-            }
-
-            if (Environment.GetEnvironmentVariable("WEBSOCKET_URL") == null)
-            {
-                throw new Exception("WEBSOCKET_URL is not defined in the environment variables");
-            }
+            ValidateEnvs("SERVER_WEBSOCKET_HTTP_PORT", "WEBSOCKET_URL");
         }
 
         if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "AWS")
         {
-            if (Environment.GetEnvironmentVariable("AWS_WEBSOCKET_ENDPOINT") == null)
-            {
-                throw new Exception("AWS_WEBSOCKET_ENDPOINT is not defined in the environment variables");
-            }
-
-            if (Environment.GetEnvironmentVariable("AWS_REGION") == null)
-            {
-                throw new Exception("AWS_REGION is not defined in the environment variables");
-            }
-
-            if (Environment.GetEnvironmentVariable("WEBSOCKET_URL") == null)
-            {
-                throw new Exception("WEBSOCKET_URL is not defined in the environment variables");
-            }
+            ValidateEnvs("AWS_WEBSOCKET_ENDPOINT", "AWS_REGION", "WEBSOCKET_URL");
         }
 
         if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "AZURE")
         {
-            if (Environment.GetEnvironmentVariable("AZURE_WEBSOCKET_ENDPOINT") == null)
-            {
-                throw new Exception("AZURE_WEBSOCKET_ENDPOINT is not defined in the environment variables");
-            }
-
-            if (Environment.GetEnvironmentVariable("AZURE_WEBSOCKET_ACCESS_TOKEN") == null)
-            {
-                throw new Exception("AZURE_WEBSOCKET_ACCESS_TOKEN is not defined in the environment variables");
-            }
-
-            if (Environment.GetEnvironmentVariable("AZURE_WEBSOCKET_HUB") == null)
-            {
-                throw new Exception("AZURE_WEBSOCKET_HUB is not defined in the environment variables");
-            }
+            ValidateEnvs("AZURE_WEBSOCKET_ENDPOINT", "AZURE_WEBSOCKET_ACCESS_TOKEN", "AZURE_WEBSOCKET_HUB");
         }
 
         return app;
