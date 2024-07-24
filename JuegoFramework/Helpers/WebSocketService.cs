@@ -116,11 +116,16 @@ namespace JuegoFramework.Helpers
             return SocketConnections.TryGetValue(connectionId, out socket);
         }
 
-        public static string CreateWebSocketUrl(string userId)
+        public static string CreateWebSocketUrl(string accessToken)
         {
+            if(Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "SERVER" || Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "AWS")
+            {
+                return Environment.GetEnvironmentVariable("WEBSOCKET_URL") + "?access_token=" + accessToken;
+            }
+
             if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "AZURE")
             {
-                return AzureWebSocket.CreateWebSocketUrl(userId);
+                return AzureWebSocket.CreateWebSocketUrl(accessToken);
             }
 
             return string.Empty;

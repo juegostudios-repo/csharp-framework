@@ -147,6 +147,11 @@ public static class Application
             {
                 throw new Exception("SERVER_WEBSOCKET_HTTP_PORT is not defined in the environment variables");
             }
+
+            if (Environment.GetEnvironmentVariable("WEBSOCKET_URL") == null)
+            {
+                throw new Exception("WEBSOCKET_URL is not defined in the environment variables");
+            }
         }
 
         if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "AWS")
@@ -159,6 +164,11 @@ public static class Application
             if (Environment.GetEnvironmentVariable("AWS_REGION") == null)
             {
                 throw new Exception("AWS_REGION is not defined in the environment variables");
+            }
+
+            if (Environment.GetEnvironmentVariable("WEBSOCKET_URL") == null)
+            {
+                throw new Exception("WEBSOCKET_URL is not defined in the environment variables");
             }
         }
 
