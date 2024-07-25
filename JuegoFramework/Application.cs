@@ -109,6 +109,35 @@ public static class Application
         return builder;
     }
 
+    public static void AddAuthToSwagger(WebApplicationBuilder builder, string key)
+    {
+        builder.Services.AddSwaggerGen(opt =>
+        {
+            opt.SupportNonNullableReferenceTypes();
+            opt.AddSecurityDefinition(key, new OpenApiSecurityScheme
+            {
+                In = ParameterLocation.Header,
+                Description = "Please enter " + key,
+                Name = key,
+                Type = SecuritySchemeType.ApiKey
+            });
+            opt.AddSecurityRequirement(new OpenApiSecurityRequirement
+            {
+                {
+                    new OpenApiSecurityScheme
+                    {
+                        Reference = new OpenApiReference
+                        {
+                            Type=ReferenceType.SecurityScheme,
+                            Id=key
+                        }
+                    },
+                    new string[]{}
+                }
+            });
+        });
+    }
+
     public static void ValidateEnvs(params string[] requiredVars)
     {
         var missingVars = requiredVars
