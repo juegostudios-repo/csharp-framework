@@ -158,17 +158,17 @@ public static class Application
 
         if (app.Environment.IsDevelopment())
         {
-            string basePath = Environment.GetEnvironmentVariable("BASE_PATH") ?? "";
-            if (!string.IsNullOrEmpty(basePath) && !basePath.StartsWith("/"))
-            {
-                basePath = $"/{basePath}";
-            }
+            ValidateEnvs("API_URL");
 
             app.UseSwagger(c =>
             {
                 c.PreSerializeFilters.Add((swaggerDoc, httpReq) =>
                 {
-                    swaggerDoc.Servers = new List<OpenApiServer> { new OpenApiServer { Url = $"{httpReq.Scheme}://{httpReq.Host.Value}{basePath}" } };
+                    swaggerDoc.Servers = [
+                        new OpenApiServer {
+                            Url = Environment.GetEnvironmentVariable("API_URL")
+                        }
+                    ];
                 });
             });
             app.UseSwaggerUI();
