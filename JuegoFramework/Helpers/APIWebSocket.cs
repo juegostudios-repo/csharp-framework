@@ -6,6 +6,7 @@ namespace JuegoFramework.Helpers
 {
     class APIWebSocket
     {
+        private static readonly string serverWebsocketHttpHost = Environment.GetEnvironmentVariable("SERVER_WEBSOCKET_HTTP_HOST") ?? "localhost";
         private static readonly string serverWebsocketHttpPort = Environment.GetEnvironmentVariable("SERVER_WEBSOCKET_HTTP_PORT") ?? "";
 
         public static async Task SendMessageAsync(string connectionId, byte[] buffer)
@@ -23,7 +24,7 @@ namespace JuegoFramework.Helpers
             Log.Information($"{requestId}: APIWebSocket.SendMessageAsync: Sending message to connection: {connectionId}");
 
             using HttpClient client = new();
-            var uri = new Uri($"http://localhost:{serverWebsocketHttpPort}/api-websocket");
+            var uri = new Uri($"http://{serverWebsocketHttpHost}:{serverWebsocketHttpPort}/api-websocket");
 
             try
             {
