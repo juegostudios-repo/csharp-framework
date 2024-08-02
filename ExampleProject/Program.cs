@@ -1,15 +1,23 @@
 using API.Library;
 using JuegoFramework.Helpers;
+using dotenv.net;
+
+#if DEBUG
+    DotEnv.Load();
+#endif
 
 Application.InitLogger();
 
 var builder = Application.InitBuilder(args);
 builder.Services.AddScoped<ILoginService, LoginService>();
 builder.Services.AddScoped<IWebSocketHandler, WebSocketHandler>();
+Application.AddAuthToSwagger(builder, "access_token");
 
 var app = Application.InitApp(builder);
 
-app.UseMiddleware<ApiLoggingMiddleware>(Array.Empty<object>());
+app.UseMiddleware<ApiLoggingMiddleware>();
+
+app.UseCors("AllowAll");
 
 await Application.InitCron();
 

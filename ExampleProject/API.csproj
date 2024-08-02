@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="Azure.Communication.Email" Version="1.0.1" />
+    <PackageReference Include="dotenv.net" Version="3.2.0" />
     <ProjectReference Include="../JuegoFramework/JuegoFramework.csproj" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.1">

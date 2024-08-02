@@ -100,6 +100,16 @@ public static class Application
 
         builder.Services.AddAWSLambdaHosting(LambdaEventSource.RestApi);
 
+        builder.Services.AddCors(options =>
+        {
+            options.AddPolicy("AllowAll", builder =>
+            {
+                builder.AllowAnyOrigin()
+                    .AllowAnyMethod()
+                    .AllowAnyHeader();
+            });
+        });
+
         var dbConnectionStringEnv = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
         if (!string.IsNullOrEmpty(dbConnectionStringEnv))
         {
