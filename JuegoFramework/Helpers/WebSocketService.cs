@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -6,7 +7,7 @@ namespace JuegoFramework.Helpers
 {
     public class WebSocketService
     {
-        private static readonly Dictionary<string, WebSocket> SocketConnections = new();
+        private static readonly ConcurrentDictionary<string, WebSocket> SocketConnections = new();
 
         public async Task HandleWebSocketAsync(HttpContext context)
         {
@@ -15,7 +16,7 @@ namespace JuegoFramework.Helpers
             // Handle the WebSocket connection...
             WebSocket webSocket = await context.WebSockets.AcceptWebSocketAsync();
             string connectionId = context.Connection.Id;
-            SocketConnections[connectionId] = webSocket;
+            SocketConnections.TryAdd(connectionId, webSocket);
 
             string token = context.Request.Query["access_token"].ToString() ?? string.Empty;
             Log.Information("token: {0}", token);
@@ -39,7 +40,7 @@ namespace JuegoFramework.Helpers
                         if (webSocket.State == WebSocketState.Open)
                         {
                             await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by the server", CancellationToken.None);
-                            if (SocketConnections.Remove(connectionId))
+                            if (SocketConnections.TryRemove(connectionId, out _))
                             {
                                 await webSocketHandlerService.DisconnectSocket(connectionId);
                             }
@@ -56,7 +57,7 @@ namespace JuegoFramework.Helpers
                 {
                     // If the WebSocket is not already closed, close it.
                     await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
-                    if (SocketConnections.Remove(connectionId))
+                    if (SocketConnections.TryRemove(connectionId, out _))
                     {
                         await webSocketHandlerService.DisconnectSocket(connectionId);
                     }
@@ -68,7 +69,7 @@ namespace JuegoFramework.Helpers
                 {
                     // If the WebSocket is not already closed, close it.
                     await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
-                    if (SocketConnections.Remove(connectionId))
+                    if (SocketConnections.TryRemove(connectionId, out _))
                     {
                         await webSocketHandlerService.DisconnectSocket(connectionId);
                     }
