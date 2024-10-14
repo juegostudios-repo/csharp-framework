@@ -8,9 +8,8 @@ namespace JuegoFramework.Helpers
         {
             // includes all the cron jobs that implement Cron abstract class
             var cronJobs = Assembly.GetEntryAssembly()!.GetTypes()
-                .Where(t => t.IsSubclassOf(typeof(Cron)))
+                .Where(t => t.IsSubclassOf(typeof(Cron)) || t.IsSubclassOf(typeof(ScheduledCron)))
                 .Select(Activator.CreateInstance)
-                .Cast<Cron>()
                 .ToList();
 
             if (cronJobs.Count == 0)
@@ -22,8 +21,20 @@ namespace JuegoFramework.Helpers
             // create a SingleExecutionAsyncTimer for each cron job
             foreach (var cronJob in cronJobs)
             {
+                if (cronJob == null)
+                {
+                    continue;
+                }
+
                 Log.Information($"Starting {cronJob.GetType().Name}");
-                var timer = new SingleExecutionAsyncTimer(cronJob.Run, cronJob.Interval);
+                if (cronJob is ScheduledCron scheduledCronJob)
+                {
+                    _ = Task.Run(scheduledCronJob.RunScheduledTask);
+                }
+                else if (cronJob is Cron regularCronJob)
+                {
+                    var timer = new SingleExecutionAsyncTimer(regularCronJob.Run, regularCronJob.Interval);
+                }
             }
 
             await Task.Delay(-1);
