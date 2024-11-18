@@ -6,6 +6,7 @@ using JuegoFramework.Helpers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.OpenApi.Models;
+using Scalar.AspNetCore;
 
 public static class Application
 {
@@ -180,8 +181,13 @@ public static class Application
                         }
                     ];
                 });
+
+                c.RouteTemplate = "openapi/{documentName}.json";
             });
-            app.UseSwaggerUI();
+            app.UseSwaggerUI(c => {
+                c.SwaggerEndpoint("/openapi/v1.json", "API V1");
+            });
+            app.MapScalarApiReference();
         }
 
         if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "SERVER")
