@@ -235,6 +235,11 @@ namespace JuegoFramework.Helpers
                     parameters.Add($"@{item.Key}", item.Value);
                 }
 
+                if (where == "")
+                {
+                    where = "1 = 1";
+                }
+
                 var sql = $"SELECT * FROM {GetTableName(typeof(T))} WHERE {where}";
                 var result = await conn.QueryAsync<T>(sql, parameters, transaction: trans);
                 return result.ToList();
