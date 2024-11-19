@@ -161,6 +161,16 @@ public static class Application
         }
     }
 
+    private static string GetSubdirectoryPath(string url)
+    {
+        if (Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) && uri != null)
+        {
+            return string.IsNullOrEmpty(uri.AbsolutePath) || uri.AbsolutePath == "/" ? "" : uri.AbsolutePath;
+        }
+
+        return "";
+    }
+
     public static WebApplication InitApp(WebApplicationBuilder builder)
     {
         var app = builder.Build();
@@ -171,23 +181,24 @@ public static class Application
         {
             ValidateEnvs("API_URL");
 
+            string apiURL = Environment.GetEnvironmentVariable("API_URL")!;
+
             app.UseSwagger(c =>
             {
                 c.PreSerializeFilters.Add((swaggerDoc, httpReq) =>
                 {
                     swaggerDoc.Servers = [
                         new OpenApiServer {
-                            Url = Environment.GetEnvironmentVariable("API_URL")
+                            Url = apiURL
                         }
                     ];
                 });
-
-                c.RouteTemplate = "openapi/{documentName}.json";
             });
-            app.UseSwaggerUI(c => {
-                c.SwaggerEndpoint("/openapi/v1.json", "API V1");
+            app.UseSwaggerUI();
+            app.MapScalarApiReference(options => {
+                options.OpenApiRoutePattern = GetSubdirectoryPath(apiURL) + "/swagger/{documentName}/swagger.json";
+                options.EndpointPathPrefix = "/scalar/{documentName}";
             });
-            app.MapScalarApiReference();
         }
 
         if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "SERVER")
