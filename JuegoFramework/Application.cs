@@ -45,6 +45,12 @@ public static class Application
 
         builder.Services.AddSwaggerGen();
 
+        var dbConnectionStringEnv = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
+        if (!string.IsNullOrEmpty(dbConnectionStringEnv))
+        {
+            builder.Configuration["ConnectionStrings:DefaultConnection"] = dbConnectionStringEnv;
+        }
+
         builder.Services.AddHealthChecks()
             .AddMySql(
                 connectionString: builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new Exception("Database ConnectionString not defined"),
@@ -110,12 +116,6 @@ public static class Application
                     .AllowAnyHeader();
             });
         });
-
-        var dbConnectionStringEnv = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
-        if (!string.IsNullOrEmpty(dbConnectionStringEnv))
-        {
-            builder.Configuration["ConnectionStrings:DefaultConnection"] = dbConnectionStringEnv;
-        }
 
         return builder;
     }
