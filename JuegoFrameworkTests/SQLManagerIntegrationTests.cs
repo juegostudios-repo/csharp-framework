@@ -454,6 +454,83 @@ public class SQLManagerIntegrationTests : IAsyncLifetime
         Assert.NotEqual(testData[1].Counter, allRecords[1].Counter);
     }
 
+    [Fact]
+    public async Task InOperator()
+    {
+        var testData = new List<TestEntity> {
+            new TestEntity {
+                Name = "Test_InOperator1",
+                JsonData = new double[] { 1, 2, 3 },
+                Counter = 1
+            },
+            new TestEntity {
+                Name = "Test_InOperator2",
+                JsonData = new double[] { 1, 2, 3 },
+                Counter = 2
+            },
+            new TestEntity {
+                Name = "Test_InOperator3",
+                JsonData = new double[] { 1, 2, 3 },
+                Counter = 3
+            }
+        };
+
+        List<long> insertedIds = await SQLManager.Insert<TestEntity>(testData);
+
+        Assert.True(insertedIds.Count == 3);
+
+        var foundEntities = await SQLManager.FindAll<TestEntity>(new {
+            Name = Operation.In(["Test_InOperator1", "Test_InOperator3"])
+        });
+
+        Assert.NotNull(foundEntities);
+        Assert.Equal(2, foundEntities.Count);
+        Assert.Contains(foundEntities, e => e.Name == "Test_InOperator1");
+        Assert.Contains(foundEntities, e => e.Name == "Test_InOperator3");
+    }
+
+    [Fact]
+    public async Task UpdateUsingInOperator()
+    {
+        var testData = new List<TestEntity> {
+            new TestEntity {
+                Name = "Test_UpdateInOperator1",
+                JsonData = new double[] { 1, 2, 3 },
+                Counter = 1
+            },
+            new TestEntity {
+                Name = "Test_UpdateInOperator2",
+                JsonData = new double[] { 1, 2, 3 },
+                Counter = 2
+            },
+            new TestEntity {
+                Name = "Test_UpdateInOperator3",
+                JsonData = new double[] { 1, 2, 3 },
+                Counter = 3
+            }
+        };
+
+        List<long> insertedIds = await SQLManager.Insert<TestEntity>(testData);
+
+        Assert.True(insertedIds.Count == 3);
+
+        var affectedRows = await SQLManager.Update<TestEntity>(new {
+            Name = Operation.In(["Test_UpdateInOperator1", "Test_UpdateInOperator3"])
+        }, new {
+            Counter = 50
+        });
+
+        Assert.Equal(2, affectedRows);
+
+        var updatedEntities = await SQLManager.FindAll<TestEntity>(new {
+            Name = Operation.In(["Test_UpdateInOperator1", "Test_UpdateInOperator3"])
+        });
+
+        Assert.NotNull(updatedEntities);
+        Assert.Equal(2, updatedEntities.Count);
+        Assert.All(updatedEntities, e => Assert.Equal(50, e.Counter));
+    }
+
     public async Task DisposeAsync()
     {
         // Console.WriteLine("Disposing test database...");
