@@ -32,12 +32,20 @@ namespace JuegoFramework.Helpers
         public static DecrementOperation Decrement(int value) => new(value);
         public static NotOperation Not(object value) => new(value);
         public static InOperation In(IEnumerable<object> values) => new(values);
+        public static LessThanOperation LessThan(object value) => new(value);
+        public static LessThanEqualOperation LessThanEqual(object value) => new(value);
+        public static GreaterThanOperation GreaterThan(object value) => new(value);
+        public static GreaterThanEqualOperation GreaterThanEqual(object value) => new(value);
     }
 
     public record IncrementOperation(int Value);
     public record DecrementOperation(int Value);
     public record NotOperation(object Value);
     public record InOperation(IEnumerable<object> Values);
+    public record LessThanOperation(object Value);
+    public record LessThanEqualOperation(object Value);
+    public record GreaterThanOperation(object Value);
+    public record GreaterThanEqualOperation(object Value);
 
     public class SQLManager
     {
@@ -187,6 +195,22 @@ namespace JuegoFramework.Helpers
                     {
                         return $"{x.Key} IN @{x.Key}";
                     }
+                    if (x.Value is not null and LessThanOperation)
+                    {
+                        return $"{x.Key} < @{x.Key}";
+                    }
+                    if (x.Value is not null and LessThanEqualOperation)
+                    {
+                        return $"{x.Key} <= @{x.Key}";
+                    }
+                    if (x.Value is not null and GreaterThanOperation)
+                    {
+                        return $"{x.Key} > @{x.Key}";
+                    }
+                    if (x.Value is not null and GreaterThanEqualOperation)
+                    {
+                        return $"{x.Key} >= @{x.Key}";
+                    }
                     return $"{x.Key} = @{x.Key}";
                 }));
 
@@ -202,6 +226,26 @@ namespace JuegoFramework.Helpers
                     if (item.Value is not null and InOperation)
                     {
                         parameters.Add($"@{item.Key}", (item.Value as InOperation)?.Values);
+                        continue;
+                    }
+                    if (item.Value is not null and LessThanOperation)
+                    {
+                        parameters.Add($"@{item.Key}", (item.Value as LessThanOperation)?.Value);
+                        continue;
+                    }
+                    if (item.Value is not null and LessThanEqualOperation)
+                    {
+                        parameters.Add($"@{item.Key}", (item.Value as LessThanEqualOperation)?.Value);
+                        continue;
+                    }
+                    if (item.Value is not null and GreaterThanOperation)
+                    {
+                        parameters.Add($"@{item.Key}", (item.Value as GreaterThanOperation)?.Value);
+                        continue;
+                    }
+                    if (item.Value is not null and GreaterThanEqualOperation)
+                    {
+                        parameters.Add($"@{item.Key}", (item.Value as GreaterThanEqualOperation)?.Value);
                         continue;
                     }
                     parameters.Add($"@{item.Key}", item.Value);
@@ -235,6 +279,22 @@ namespace JuegoFramework.Helpers
                     {
                         return $"{x.Key} IN @{x.Key}";
                     }
+                    if (x.Value is not null and LessThanOperation)
+                    {
+                        return $"{x.Key} < @{x.Key}";
+                    }
+                    if (x.Value is not null and LessThanEqualOperation)
+                    {
+                        return $"{x.Key} <= @{x.Key}";
+                    }
+                    if (x.Value is not null and GreaterThanOperation)
+                    {
+                        return $"{x.Key} > @{x.Key}";
+                    }
+                    if (x.Value is not null and GreaterThanEqualOperation)
+                    {
+                        return $"{x.Key} >= @{x.Key}";
+                    }
                     return $"{x.Key} = @{x.Key}";
                 }));
 
@@ -250,6 +310,26 @@ namespace JuegoFramework.Helpers
                     if (item.Value is not null and InOperation)
                     {
                         parameters.Add($"@{item.Key}", (item.Value as InOperation)?.Values);
+                        continue;
+                    }
+                    if (item.Value is not null and LessThanOperation)
+                    {
+                        parameters.Add($"@{item.Key}", (item.Value as LessThanOperation)?.Value);
+                        continue;
+                    }
+                    if (item.Value is not null and LessThanEqualOperation)
+                    {
+                        parameters.Add($"@{item.Key}", (item.Value as LessThanEqualOperation)?.Value);
+                        continue;
+                    }
+                    if (item.Value is not null and GreaterThanOperation)
+                    {
+                        parameters.Add($"@{item.Key}", (item.Value as GreaterThanOperation)?.Value);
+                        continue;
+                    }
+                    if (item.Value is not null and GreaterThanEqualOperation)
+                    {
+                        parameters.Add($"@{item.Key}", (item.Value as GreaterThanEqualOperation)?.Value);
                         continue;
                     }
                     parameters.Add($"@{item.Key}", item.Value);

@@ -534,6 +534,94 @@ public class SQLManagerIntegrationTests : IAsyncLifetime
         Assert.All(updatedEntities, e => Assert.Equal(50, e.Counter));
     }
 
+    [Fact]
+    public async Task LessThanOperator()
+    {
+        var testData = new List<TestEntity> {
+            new TestEntity { Name = "Test_LessThan1", Counter = 1 },
+            new TestEntity { Name = "Test_LessThan2", Counter = 2 },
+            new TestEntity { Name = "Test_LessThan3", Counter = 3 }
+        };
+
+        List<long> insertedIds = await SQLManager.Insert<TestEntity>(testData);
+        Assert.True(insertedIds.Count == 3);
+
+        var foundEntities = await SQLManager.FindAll<TestEntity>(new {
+            Counter = Operation.LessThan(3)
+        });
+
+        Assert.NotNull(foundEntities);
+        Assert.Equal(2, foundEntities.Count);
+        Assert.Contains(foundEntities, e => e.Counter == 1);
+        Assert.Contains(foundEntities, e => e.Counter == 2);
+    }
+
+    [Fact]
+    public async Task LessThanEqualOperator()
+    {
+        var testData = new List<TestEntity> {
+            new TestEntity { Name = "Test_LessThanEqual1", Counter = 1 },
+            new TestEntity { Name = "Test_LessThanEqual2", Counter = 2 },
+            new TestEntity { Name = "Test_LessThanEqual3", Counter = 3 }
+        };
+
+        List<long> insertedIds = await SQLManager.Insert<TestEntity>(testData);
+        Assert.True(insertedIds.Count == 3);
+
+        var foundEntities = await SQLManager.FindAll<TestEntity>(new {
+            Counter = Operation.LessThanEqual(2)
+        });
+
+        Assert.NotNull(foundEntities);
+        Assert.Equal(2, foundEntities.Count);
+        Assert.Contains(foundEntities, e => e.Counter == 1);
+        Assert.Contains(foundEntities, e => e.Counter == 2);
+    }
+
+    [Fact]
+    public async Task GreaterThanOperator()
+    {
+        var testData = new List<TestEntity> {
+            new TestEntity { Name = "Test_GreaterThan1", Counter = 1 },
+            new TestEntity { Name = "Test_GreaterThan2", Counter = 2 },
+            new TestEntity { Name = "Test_GreaterThan3", Counter = 3 }
+        };
+
+        List<long> insertedIds = await SQLManager.Insert<TestEntity>(testData);
+        Assert.True(insertedIds.Count == 3);
+
+        var foundEntities = await SQLManager.FindAll<TestEntity>(new {
+            Counter = Operation.GreaterThan(1)
+        });
+
+        Assert.NotNull(foundEntities);
+        Assert.Equal(2, foundEntities.Count);
+        Assert.Contains(foundEntities, e => e.Counter == 2);
+        Assert.Contains(foundEntities, e => e.Counter == 3);
+    }
+
+    [Fact]
+    public async Task GreaterThanEqualOperator()
+    {
+        var testData = new List<TestEntity> {
+            new TestEntity { Name = "Test_GreaterThanEqual1", Counter = 1 },
+            new TestEntity { Name = "Test_GreaterThanEqual2", Counter = 2 },
+            new TestEntity { Name = "Test_GreaterThanEqual3", Counter = 3 }
+        };
+
+        List<long> insertedIds = await SQLManager.Insert<TestEntity>(testData);
+        Assert.True(insertedIds.Count == 3);
+
+        var foundEntities = await SQLManager.FindAll<TestEntity>(new {
+            Counter = Operation.GreaterThanEqual(2)
+        });
+
+        Assert.NotNull(foundEntities);
+        Assert.Equal(2, foundEntities.Count);
+        Assert.Contains(foundEntities, e => e.Counter == 2);
+        Assert.Contains(foundEntities, e => e.Counter == 3);
+    }
+
     public async Task DisposeAsync()
     {
         // Console.WriteLine("Disposing test database...");
