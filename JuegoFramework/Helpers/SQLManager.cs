@@ -346,7 +346,28 @@ namespace JuegoFramework.Helpers
 
         public static async Task<int> Update<T>(object whereClause, object updateData) where T : class
         {
-            return await Update<T>(ConvertToDictionary(whereClause), ConvertToDictionary(updateData));
+            Dictionary<string, object?> whereDict;
+            Dictionary<string, object?> updateDict;
+
+            if (whereClause is Dictionary<string, object?> dictionary)
+            {
+                whereDict = dictionary;
+            }
+            else
+            {
+                whereDict = ConvertToDictionary(whereClause);
+            }
+
+            if (updateData is Dictionary<string, object?> dictionary1)
+            {
+                updateDict = dictionary1;
+            }
+            else
+            {
+                updateDict = ConvertToDictionary(updateData);
+            }
+
+            return await Update<T>(whereDict, updateDict);
         }
 
         public static async Task<long> Insert<T>(Dictionary<string, object?> insertData) where T : class

@@ -514,11 +514,14 @@ public class SQLManagerIntegrationTests : IAsyncLifetime
 
         Assert.True(insertedIds.Count == 3);
 
+        var updateData = new Dictionary<string, object?>
+        {
+            { "counter", 50 }
+        };
+
         var affectedRows = await SQLManager.Update<TestEntity>(new {
             Name = Operation.In(["Test_UpdateInOperator1", "Test_UpdateInOperator3"])
-        }, new {
-            Counter = 50
-        });
+        }, updateData);
 
         Assert.Equal(2, affectedRows);
 
