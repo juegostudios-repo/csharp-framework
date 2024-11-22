@@ -39,7 +39,10 @@ public static class Application
 
         builder.Services.AddScoped<UserAuth>();
 
-        builder.Services.AddControllers();
+        builder.Services.AddControllers(options =>
+        {
+            options.ModelMetadataDetailsProviders.Add(new RequiredBindingMetadataProvider());
+        });
 
         builder.Services.AddEndpointsApiExplorer();
 
@@ -99,6 +102,15 @@ public static class Application
                     missingField2 = Regex.Replace(missingField2, "(?<!^)([A-Z])", "_$1").ToLower();
 
                     return ApiResponse.setResponse("INVALID_INPUT_EMPTY", new { }, missingField2);
+                }
+
+                if (missingField.EndsWith("parameter or property was not provided."))
+                {
+                    // Example strings:
+                    // A value for the 'limit' parameter or property was not provided.
+                    // A value for the 'page' parameter or property was not provided.
+                    missingField = missingField.Split(" ")[4];
+                    missingField = missingField.Substring(1, missingField.Length - 2);
                 }
 
                 return ApiResponse.setResponse("PARAMETER_IS_MANDATORY", new { }, string.Join(", ", missingField));

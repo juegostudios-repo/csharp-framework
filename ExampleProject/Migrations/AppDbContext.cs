@@ -2,7 +2,6 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 
-
 namespace API.Migrations
 {
     public class AppDbContext : DbContext
@@ -48,7 +47,16 @@ namespace API.Migrations
                     .AddJsonFile("appsettings.json")
                     .Build();
                     connectionString = configuration.GetConnectionString("DefaultConnection");
-                    Log.Information(connectionString ?? "No Connection String Found");
+
+                    var dbConnectionStringEnv = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
+                    if (string.IsNullOrEmpty(connectionString))
+                    {
+                        connectionString = dbConnectionStringEnv;
+                    }
+                    else
+                    {
+                        Log.Information(connectionString ?? "No Connection String Found");
+                    }
                 }
 
                 options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
