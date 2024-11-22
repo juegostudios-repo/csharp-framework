@@ -19,7 +19,7 @@ namespace JuegoFramework.Helpers
         }
     }
 
-    public class JsonStringTypeHandler<T> : SqlMapper.TypeHandler<T>
+    class JsonStringTypeHandler<T> : SqlMapper.TypeHandler<T>
     {
         public override T? Parse(object value) => JsonSerializer.Deserialize<T>((string)value);
 
