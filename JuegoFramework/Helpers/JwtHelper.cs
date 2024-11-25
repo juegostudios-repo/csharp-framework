@@ -14,13 +14,21 @@ namespace JuegoFramework.Helpers
             var tokenHandler = new JwtSecurityTokenHandler();
             var jwtSecret = configuration["AUTH:JWT_SECRET"] ?? throw new ArgumentNullException("AUTH:JWT_SECRET", "The JWT Secret is not set in the configuration.");
             var key = Encoding.ASCII.GetBytes(jwtSecret);
+
+            var expiryDaysConfig = configuration["AUTH:JWT_EXPIRY_DAYS"];
+            DateTime expiryDate = DateTime.MaxValue;
+            if (!string.IsNullOrEmpty(expiryDaysConfig) && int.TryParse(expiryDaysConfig, out int expiryDays))
+            {
+                expiryDate = DateTime.UtcNow.AddDays(expiryDays);
+            }
+
             var tokenDescriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity(new[]
-                {
-                    new Claim(claimKey ?? (configuration["AUTH:JWT_ID_KEY"] ?? "user_id"), accountId.ToString()),
-                }),
-                Expires = DateTime.UtcNow.AddDays(7),
+                Subject = new ClaimsIdentity(
+                [
+                    new Claim(claimKey ?? configuration["AUTH:JWT_ID_KEY"] ?? "user_id", accountId.ToString()),
+                ]),
+                Expires = expiryDate,
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };
             var token = tokenHandler.CreateToken(tokenDescriptor);
