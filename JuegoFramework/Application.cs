@@ -161,6 +161,11 @@ public static class Application
         });
     }
 
+    public static void EnableRedis(WebApplicationBuilder builder)
+    {
+        builder.Services.AddSingleton<Redis>();
+    }
+
     public static void ValidateEnvs(params string[] requiredVars)
     {
         var missingVars = requiredVars
