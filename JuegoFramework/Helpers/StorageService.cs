@@ -19,6 +19,11 @@ public class StorageService
 
     public static string GetUrl(string path)
     {
+        if (path == string.Empty)
+        {
+            return string.Empty;
+        }
+
         if (Environment.GetEnvironmentVariable("USE_STORAGE_SYSTEM") == "AZURE")
         {
             return AzureBlobStorage.GetUrl(path);
