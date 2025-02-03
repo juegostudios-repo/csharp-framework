@@ -1,6 +1,6 @@
 using JuegoFramework.Helpers;
 using ProjectName.Models;
-using static API.Globals.Constants;
+using static ProjectName.Globals.Constants;
 
 namespace ProjectName.Library;
 

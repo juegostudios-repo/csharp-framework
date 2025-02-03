@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using JuegoFramework.Helpers;
-using API.Models;
+using ProjectName.Models;
 using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 
-namespace API.Controllers
+namespace ProjectName.Controllers
 {
     [Route("/user")]
     [ApiController]

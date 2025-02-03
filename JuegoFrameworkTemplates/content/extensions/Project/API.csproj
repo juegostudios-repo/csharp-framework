@@ -1,20 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <PackageType>Template</PackageType>
-    <PackageVersion>1.0.1</PackageVersion>
-    <PackageId>TestTemplate.ASP.NET.CSharp8</PackageId>
-    <Title>CustomTemp.NET Core Web API</Title>
-    <Authors>Me</Authors>
-    <Description>A project template for creating an ASP.NET Core application with an example Controller for a RESTful HTTP service.</Description>
-    <PackageTags>C#;project</PackageTags>
-    <TargetFramework>netstandard2.0</TargetFramework>
-
-    <IncludeContentInPack>true</IncludeContentInPack>
-    <IncludeBuildOutput>false</IncludeBuildOutput>
-    <ContentTargetFolders>content</ContentTargetFolders>
-
-    <TargetFramework>net8.0</TargetFramework>
+     <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>example-project</AssemblyName>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -24,7 +11,7 @@
   <ItemGroup>
     <PackageReference Include="Azure.Communication.Email" Version="1.0.1" />
     <PackageReference Include="dotenv.net" Version="3.2.1" />
-    <ProjectReference Include="../JuegoFramework/JuegoFramework.csproj" />
+    <PackageReference Include="JuegoFramework" Version="1.0.17" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.11" Condition=" '$(DbTypeMySql)' == 'True' OR '$(DbTypeMongo)' == 'True'"/>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11" Condition=" '$(DbTypeMySql)' == 'True' OR '$(DbTypeMongo)' == 'True'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -32,7 +19,6 @@
     </PackageReference>
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" Condition=" '$(DbTypeMySql)' == 'True'"/>
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql.Design" Version="1.1.2" Condition=" '$(DbTypeMySql)' == 'True'"/>
-    <PackageReference Include="RedLock.Net" Version="2.3.2" Condition=" '$(redis)' == 'True'" />
   </ItemGroup>
 
 </Project>

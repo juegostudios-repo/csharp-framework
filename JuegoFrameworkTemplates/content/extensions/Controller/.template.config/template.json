@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Me",
+  "classifications": [
+    "Web",
+    "API",
+    "ASP.NET",
+    "ASP.NET Core"
+  ],
+  "name": "JuegoFramework.Controller.Template",
+  "generatorVersions": "[1.0.0.0-*)",
+  "identity": "JuegoFramework.Controller",
+  "shortName": "juegoframework-controller",
+  "description": "API Controller with or without read/write actions",
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "sourceName": "Custom",
+  "primaryOutputs": [
+    {
+      "path": "CustomController.cs"
+    }
+  ],
+  "preferNameDirectory": false,
+  "defaultName": "Custom",
+  "sources": [
+    {
+      "source": "./",
+      "target": "./",
+      "exclude": [
+        ".template.config/**"
+      ],
+      "modifiers": [
+        {
+          "condition": "(!IsDtoEnabled)",
+          "exclude": [
+            "Models/Dto/**"
+          ]
+        }
+      ]
+    }
+  ],
+  "symbols": {
+    "project": {
+      "description": "Namespace for the generated code",
+      "replaces": "ProjectName",
+      "type": "parameter",
+      "defaultValue": "API"
+    },
+    "auth": {
+      "description": "Add API authentication to the controller",
+      "displayName": "Add API Authentication",
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false"
+    },
+    "IsAuthEnabled": {
+      "type": "computed",
+      "value": "(authEnabled == \"true\")"
+    },
+    "dto": {
+      "description": "Add a DTO to the controller",
+      "displayName": "Add DTO",
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false"
+    },
+    "IsDtoEnabled": {
+      "type": "computed",
+      "value": "(dtoEnabled == \"true\")"
+    }
+  }
+}

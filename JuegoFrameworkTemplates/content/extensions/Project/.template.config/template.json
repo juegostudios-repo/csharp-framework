@@ -5,11 +5,11 @@
     "Web",
     "WebAPI"
   ],
-  "name": "CustomTemp.NET Core Web API",
+  "name": "JuegoFramework.Project.Template",
   "generatorVersions": "[1.0.0.0-*)",
   "description": "A project template for creating an ASP.NET Core application with an example Controller for a RESTful HTTP service.",
-  "identity": "TestTemplate.ASP.NET.CSharp8",
-  "shortName": "test-project-template",
+  "identity": "JuegoFramework.Project.Template",
+  "shortName": "juegoframework-project",
   "tags": {
     "language": "C#",
     "type": "project"
@@ -34,15 +34,10 @@
           ]
         },
         {
-          "condition": "(!redis)",
-          "exclude": [
-            "Helper/RedisHelper.cs"
-          ]
-        },
-        {
           "condition": "(!DbTypeMySql)",
           "exclude": [
-            "Library/MySqlLib/**"
+            "Library/MySqlLib/**",
+            "Migration/**"
           ]
         }
       ]
@@ -55,24 +50,19 @@
       "choices": [
         {
           "choice": "MySql",
-          "description": "MySql Database",
-          "symbols": [
-            "DBTYPE_MYSQL"
-          ]
+          "description": "MySql Database"
         },
         {
-          "choice": "MongoDb",
+          "choice": "Mongo",
           "description": "MongoDB"
+        },
+        {
+          "choice": "None",
+          "description": "None"
         }
       ],
       "defaultValue": "MySql",
       "description": "The type of Database to use"
-    },
-    "redis": {
-      "type": "parameter",
-      "datatype": "bool",
-      "defaultValue": "false",
-      "description": "Add Redis Configaration."
     },
     "DbTypeMySql": {
       "type": "computed",
@@ -80,7 +70,7 @@
     },
     "DbTypeMongo": {
       "type": "computed",
-      "value": "(dbType == \"MongoDb\")"
+      "value": "(dbType == \"Mongo\")"
     },
     "skipRestore": {
       "type": "parameter",
@@ -91,7 +81,7 @@
   },
   "primaryOutputs": [
     {
-      "path": "ProjectTemplate.csproj"
+      "path": "ProjectName.csproj"
     }
   ],
   "postActions": [
