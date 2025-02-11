@@ -24,16 +24,16 @@ public class Redis()
     public static async Task Set(RedisKey key, object value, string prefix)
     {
         IDatabase _db = Database;
-        prefix = redisPrefixKey + prefix;
+        prefix = redisPrefixKey + ":" + prefix;
         string json = JsonSerializer.Serialize(value);
-        await _db.StringSetAsync(key.Append(prefix + "-"), json);
+        await _db.StringSetAsync(key.Prepend(prefix + ":"), json);
     }
 
     public static async Task<T?> Get<T>(RedisKey key, string prefix)
     {
         IDatabase _db = Database;
-        prefix = redisPrefixKey + prefix;
-        string? json = await _db.StringGetAsync(key.Append(prefix + "-"));
+        prefix = redisPrefixKey + ":" + prefix;
+        string? json = await _db.StringGetAsync(key.Prepend(prefix + ":"));
         if (json == null) return default;
         return JsonSerializer.Deserialize<T>(json);
     }
