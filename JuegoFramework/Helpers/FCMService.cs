@@ -5,7 +5,7 @@ using Google.Apis.Auth.OAuth2;
 
 public class FCMService
 {
-    private static readonly string  fcmServiceAccountPath = Environment.GetEnvironmentVariable("FCM_SERVICE_ACCOUNT_Path") ?? "";
+    private static readonly string  fcmServiceAccountPath = Environment.GetEnvironmentVariable("FCM_SERVICE_ACCOUNT_PATH") ?? "";
     private static bool _isInitialized = false;
 
     public FCMService()
