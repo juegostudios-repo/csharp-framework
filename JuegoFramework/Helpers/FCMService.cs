@@ -64,7 +64,7 @@ namespace JuegoFramework.Helpers
             return false;
         }
 
-        public static async Task<bool> SendPushNotificationToChannelAsync(string topic, string title, string body, Dictionary<string, string> data)
+        public static async Task<bool> SendPushNotificationToTopicAsync(string topic, string title, string body, Dictionary<string, string> data)
         {
             var message = new Message
             {
