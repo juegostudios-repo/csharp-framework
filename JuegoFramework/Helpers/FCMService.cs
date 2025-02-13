@@ -2,115 +2,126 @@ using FirebaseAdmin;
 using FirebaseAdmin.Messaging;
 using Google.Apis.Auth.OAuth2;
 
-
-public class FCMService
+namespace JuegoFramework.Helpers
 {
-    private static readonly string firebasePrivateKey = Environment.GetEnvironmentVariable("FIREBASE_PRIVATE_KEY") ?? "";
-    private static bool _isInitialized = false;
 
-    public FCMService()
+    public class FCMService
     {
-        InitializeFirebase();
-    }
+        private static readonly string firebasePrivateKey = Environment.GetEnvironmentVariable("FIREBASE_PRIVATE_KEY") ?? "";
+        private static bool _isInitialized = false;
 
-    private void InitializeFirebase()
-    {
-        if (!_isInitialized)
+        static FCMService()
         {
-            if (FirebaseApp.DefaultInstance == null)
+            InitializeFirebase();
+        }
+
+        private static void InitializeFirebase()
+        {
+            if (_isInitialized) return;
+
+            try
             {
-                FirebaseApp.Create(new AppOptions()
+                if (FirebaseApp.DefaultInstance == null)
                 {
-                    Credential = GoogleCredential.FromFile(firebasePrivateKey)
-                });
-                _isInitialized = true;
+                    FirebaseApp.Create(new AppOptions()
+                    {
+                        Credential = GoogleCredential.FromFile(firebasePrivateKey)
+                    });
+                    _isInitialized = true;
+                    Log.Information("Firebase initialized successfully.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Error initializing Firebase: {ex.Message}");
             }
         }
-    }
 
-    public async Task<bool> SendPushNotificationAsync(string deviceToken, string title, string body, Dictionary<string, string> data)
-    {
-        var message = new Message()
+        public static async Task<bool> SendPushNotificationAsync(string deviceToken, string title, string body, Dictionary<string, string> data)
         {
-            Token = deviceToken,
-            Notification = new Notification
+            var message = new Message
             {
-                Title = title,
-                Body = body
-            },
-            Data = data
-        };
+                Token = deviceToken,
+                Notification = new Notification { Title = title, Body = body },
+                Data = data
+            };
 
-        try
-        {
-            string response = await FirebaseMessaging.DefaultInstance.SendAsync(message);
-            Console.WriteLine("Notification Sent! Response: " + response);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error sending notification: {ex.Message}");
-            return false;
-        }
-    }
-
-    public async Task<bool> SendPushNotificationToChannelAsync(string topic, string title, string body, Dictionary<string, string> data)
-    {
-        var message = new Message()
-        {
-            Topic = topic,
-            Notification = new Notification
+            try
             {
-                Title = title,
-                Body = body
-            },
-            Data = data
-        };
-
-        try
-        {
-            string response = await FirebaseMessaging.DefaultInstance.SendAsync(message);
-            Console.WriteLine($"Notification sent to topic '{topic}'. Response: {response}");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error sending notification to topic '{topic}': {ex.Message}");
-            return false;
-        }
-    }
-
-    public async Task<bool> SendPushNotificationToMultipleTokensAsync(List<string> deviceTokens, string title, string body, Dictionary<string, string> data)
-    {
-        if (deviceTokens == null || deviceTokens.Count == 0)
-        {
-            Console.WriteLine("Error: No device tokens provided for batch notification.");
-            return false;
-        }
-
-        var message = new MulticastMessage()
-        {
-            Tokens = deviceTokens, // List of tokens
-            Notification = new Notification
+                string response = await FirebaseMessaging.DefaultInstance.SendAsync(message);
+                Log.Information($"Notification Sent! Response: {response}");
+                return true;
+            }
+            catch (FirebaseMessagingException ex)
             {
-                Title = title,
-                Body = body
-            },
-            Data = data
-        };
+                Log.Error($"FirebaseMessagingException: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Error sending notification: {ex.Message}");
+            }
 
-        try
-        {
-            var response = await FirebaseMessaging.DefaultInstance.SendEachForMulticastAsync(message);
-            Console.WriteLine($"Batch Notification Sent! Success Count: {response.SuccessCount}, Failure Count: {response.FailureCount}");
-            return response.FailureCount == 0;
+            return false;
         }
-        catch (Exception ex)
+
+        public static async Task<bool> SendPushNotificationToChannelAsync(string topic, string title, string body, Dictionary<string, string> data)
         {
-            Console.WriteLine($"Error sending batch notification: {ex.Message}");
+            var message = new Message
+            {
+                Topic = topic,
+                Notification = new Notification { Title = title, Body = body },
+                Data = data
+            };
+
+            try
+            {
+                string response = await FirebaseMessaging.DefaultInstance.SendAsync(message);
+                Log.Information($"Notification sent to topic '{topic}'. Response: {response}");
+                return true;
+            }
+            catch (FirebaseMessagingException ex)
+            {
+                Log.Error($"FirebaseMessagingException for topic '{topic}': {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Error sending notification to topic '{topic}': {ex.Message}");
+            }
+
+            return false;
+        }
+
+        public static async Task<bool> SendPushNotificationToMultipleTokensAsync(List<string> deviceTokens, string title, string body, Dictionary<string, string> data)
+        {
+            if (deviceTokens == null || deviceTokens.Count == 0)
+            {
+                Log.Warning("No device tokens provided for batch notification.");
+                return false;
+            }
+
+            var message = new MulticastMessage
+            {
+                Tokens = deviceTokens,
+                Notification = new Notification { Title = title, Body = body },
+                Data = data
+            };
+
+            try
+            {
+                var response = await FirebaseMessaging.DefaultInstance.SendEachForMulticastAsync(message);
+                Log.Information($"Batch Notification Sent! Success: {response.SuccessCount}, Failures: {response.FailureCount}");
+                return response.FailureCount == 0;
+            }
+            catch (FirebaseMessagingException ex)
+            {
+                Log.Error($"FirebaseMessagingException: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Error sending batch notification: {ex.Message}");
+            }
+
             return false;
         }
     }
-
-
 }
