@@ -5,8 +5,8 @@
     <PackageId>JuegoFramework.Templates</PackageId>
     <PackageVersion>1.0.0</PackageVersion>
     <Title>JuegoFramework.Templates</Title>
-    <Authors>Me</Authors>
-    <Description>Set of templates for creating an ASP.NET Core application with an example Controller for a RESTful HTTP service.</Description>
+    <Authors>Juego Studios</Authors>
+    <Description>Templates for JuegoFramework</Description>
     <PackageTags>dotnet-new;templates;</PackageTags>
     <PackageProjectUrl> </PackageProjectUrl>
 

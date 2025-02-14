@@ -1,14 +1,14 @@
 {
   "$schema": "http://json.schemastore.org/template",
-  "author": "Me",
+  "author": "Juego Studios",
   "classifications": [
     "Web",
     "WebAPI"
   ],
-  "name": "JuegoFramework.Project.Template",
+  "name": "JuegoFramework.ProjectTemplate",
   "generatorVersions": "[1.0.0.0-*)",
-  "description": "A project template for creating an ASP.NET Core application with an example Controller for a RESTful HTTP service.",
-  "identity": "JuegoFramework.Project.Template",
+  "description": "Project template for JuegoFramework",
+  "identity": "JuegoFramework.ProjectTemplate",
   "shortName": "juegoframework-project",
   "tags": {
     "language": "C#",

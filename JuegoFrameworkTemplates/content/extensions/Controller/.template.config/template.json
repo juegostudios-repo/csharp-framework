@@ -1,17 +1,17 @@
 {
   "$schema": "http://json.schemastore.org/template",
-  "author": "Me",
+  "author": "Juego Studios",
   "classifications": [
     "Web",
     "API",
     "ASP.NET",
     "ASP.NET Core"
   ],
-  "name": "JuegoFramework.Controller.Template",
+  "name": "JuegoFramework.ControllerTemplate",
   "generatorVersions": "[1.0.0.0-*)",
-  "identity": "JuegoFramework.Controller",
+  "identity": "JuegoFramework.ControllerTemplate",
   "shortName": "juegoframework-controller",
-  "description": "API Controller with or without read/write actions",
+  "description": "Controller template for JuegoFramework",
   "tags": {
     "language": "C#",
     "type": "item"
