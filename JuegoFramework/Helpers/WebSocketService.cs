@@ -53,26 +53,26 @@ namespace JuegoFramework.Helpers
             {
                 // The client disconnected.
                 // Handle unexpected client disconnection
-                if (webSocket.State != WebSocketState.Closed)
+                if (webSocket.State == WebSocketState.Open || webSocket.State == WebSocketState.CloseReceived || webSocket.State == WebSocketState.CloseSent)
                 {
                     // If the WebSocket is not already closed, close it.
                     await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
-                    if (SocketConnections.TryRemove(connectionId, out _))
-                    {
-                        await webSocketHandlerService.DisconnectSocket(connectionId);
-                    }
+                }
+                if (SocketConnections.TryRemove(connectionId, out _))
+                {
+                    await webSocketHandlerService.DisconnectSocket(connectionId);
                 }
             }
             finally
             {
-                if (webSocket.State != WebSocketState.Closed)
+                if (webSocket.State == WebSocketState.Open || webSocket.State == WebSocketState.CloseReceived || webSocket.State == WebSocketState.CloseSent)
                 {
                     // If the WebSocket is not already closed, close it.
                     await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
-                    if (SocketConnections.TryRemove(connectionId, out _))
-                    {
-                        await webSocketHandlerService.DisconnectSocket(connectionId);
-                    }
+                }
+                if (SocketConnections.TryRemove(connectionId, out _))
+                {
+                    await webSocketHandlerService.DisconnectSocket(connectionId);
                 }
             }
         }
