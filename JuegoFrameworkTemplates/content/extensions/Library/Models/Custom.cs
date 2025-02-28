@@ -5,12 +5,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ProjectName.Models
 {
-    [Table("Custom")]
+    [Table("custom")]
     public class Custom
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-        [Column("Custom_id")]
+        [Column("custom_id")]
         public long CustomId { get; set; }
 
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
