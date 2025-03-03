@@ -2,9 +2,11 @@ using ProjectName.Library;
 using JuegoFramework.Helpers;
 using dotenv.net;
 
+//-:cnd:noEmit
 #if DEBUG
 DotEnv.Load();
 #endif
+//+:cnd:noEmit
 
 Application.InitLogger();
 
