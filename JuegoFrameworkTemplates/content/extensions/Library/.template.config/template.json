@@ -1,0 +1,79 @@
+{
+    "$schema": "http://json.schemastore.org/template",
+    "author": "Juego Studios",
+    "classifications": [
+        "Web",
+        "API",
+        "ASP.NET",
+        "ASP.NET Core"
+    ],
+    "name": "JuegoFramework.LibraryTemplate",
+    "generatorVersions": "[1.0.0.0-*)",
+    "identity": "JuegoFramework.LibraryTemplate",
+    "shortName": "juegoframework-library",
+    "description": "Library template for JuegoFramework",
+    "tags": {
+        "language": "C#",
+        "type": "item"
+    },
+    "sourceName": "Custom",
+    "primaryOutputs": [
+        {
+            "path": "CustomLib.cs"
+        }
+    ],
+    "preferNameDirectory": false,
+    "defaultName": "Custom",
+    "sources": [
+        {
+            "source": "./",
+            "target": "./",
+            "exclude": [
+                ".template.config/**"
+            ],
+            "modifiers": [
+                {
+                    "condition": "(IsUtilLibCreation)",
+                    "exclude": [
+                        "Models/**",
+                        "Library/SqlLib/**"
+                    ]
+                },
+                {
+                    "condition": "(!IsUtilLibCreation)",
+                    "exclude": [
+                        "Library/UtilityLib/**"
+                    ]
+                }
+            ]
+        }
+    ],
+    "symbols": {
+        "project": {
+            "description": "Namespace for the generated code",
+            "replaces": "ProjectName",
+            "type": "parameter",
+            "defaultValue": "API"
+        },
+        "libType": {
+            "type": "parameter",
+            "description": "Type of library file to create",
+            "datatype": "choice",
+            "choices": [
+                {
+                    "choice": "sql",
+                    "description": "Sql library file"
+                },
+                {
+                    "choice": "util",
+                    "description": "Utility library file"
+                }
+            ],
+            "defaultValue": "sql"
+        },
+        "IsUtilLibCreation": {
+            "type": "computed",
+            "value": "(libType == \"util\")"
+        }
+    }
+}
