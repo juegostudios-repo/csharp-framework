@@ -22,7 +22,7 @@ namespace ProjectName.Migrations
                 .HasAnnotation("ProductVersion", "8.0.1")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
-            modelBuilder.Entity("API.Models.ApiLog", b =>
+            modelBuilder.Entity("ProjectName.Models.ApiLog", b =>
                 {
                     b.Property<int>("ApiLogId")
                         .ValueGeneratedOnAdd()
@@ -65,7 +65,7 @@ namespace ProjectName.Migrations
                     b.ToTable("api_log");
                 });
 
-            modelBuilder.Entity("API.Models.User", b =>
+            modelBuilder.Entity("ProjectName.Models.User", b =>
                 {
                     b.Property<long>("UserId")
                         .ValueGeneratedOnAdd()

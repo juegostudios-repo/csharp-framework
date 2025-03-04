@@ -15,7 +15,7 @@ namespace ProjectName.Migrations
         {
             base.OnModelCreating(modelBuilder);
 
-            string entityNamespace = "API.Models";
+            string entityNamespace = "ProjectName.Models";
 
             Assembly assembly = Assembly.GetExecutingAssembly()!;
 
