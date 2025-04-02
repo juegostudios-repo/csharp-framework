@@ -24,7 +24,7 @@ namespace JuegoFramework.Helpers
         {
             if (context.HttpContext.Request.Headers["access_token"] == StringValues.Empty)
             {
-                context.Result = FormatResponse(context, ApiResponse.setResponse("INVALID_INPUT_EMPTY", new { }, "access_token"));
+                context.Result = FormatResponse(context, ApiResponse.setResponse("INVALID_ACCESS_TOKEN"));
                 return;
             }
 
@@ -32,7 +32,7 @@ namespace JuegoFramework.Helpers
 
             if (authData == null)
             {
-                context.Result = FormatResponse(context, ApiResponse.setResponse("INVALID_INPUT_EMPTY", new { }, "access_token"));
+                context.Result = FormatResponse(context, ApiResponse.setResponse("INVALID_ACCESS_TOKEN"));
                 return;
             }
 
@@ -49,7 +49,7 @@ namespace JuegoFramework.Helpers
 
                 if (userInDb == null)
                 {
-                    context.Result = FormatResponse(context, ApiResponse.setResponse("INVALID_INPUT_EMPTY", new { }, "access_token"));
+                    context.Result = FormatResponse(context, ApiResponse.setResponse("INVALID_ACCESS_TOKEN"));
                     return;
                 }
 

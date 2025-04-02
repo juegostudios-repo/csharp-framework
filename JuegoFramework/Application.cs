@@ -19,7 +19,7 @@ public static class Application
             .MinimumLevel.Override("Microsoft.AspNetCore.HttpLogging.HttpLoggingMiddleware", Serilog.Events.LogEventLevel.Information)
             .Enrich.FromLogContext()
             .Enrich.With<RequestIdEnricher>()
-            .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {RequestId}{Message:lj}{NewLine}{Exception}")
+            .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {CronName} {RequestId}{Message:lj}{NewLine}{Exception}")
             .CreateLogger();
     }
 
