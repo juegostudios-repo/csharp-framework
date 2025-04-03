@@ -21,12 +21,12 @@ public class Redis()
 
     public static IDatabase Database => Redis2.GetDatabase();
 
-    public static async Task Set(RedisKey key, object value, string prefix)
+    public static async Task Set(RedisKey key, object value, string prefix, TimeSpan? expiry = null)
     {
         IDatabase _db = Database;
         prefix = redisPrefixKey + ":" + prefix;
         string json = JsonSerializer.Serialize(value);
-        await _db.StringSetAsync(key.Prepend(prefix + ":"), json);
+        await _db.StringSetAsync(key.Prepend(prefix + ":"), json, expiry);
     }
 
     public static async Task<T?> Get<T>(RedisKey key, string prefix)
