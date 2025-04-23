@@ -31,7 +31,7 @@ namespace ProjectName.Controllers
         }
 
         [HttpPost("logout")]
-        [TypeFilter(typeof(UserAuth))]
+        [UserAuth]
         [Consumes("application/x-www-form-urlencoded", "application/json")]
         public async Task<IActionResult> Logout()
         {
