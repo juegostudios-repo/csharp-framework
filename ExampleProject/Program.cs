@@ -3,6 +3,7 @@ using JuegoFramework.Helpers;
 using dotenv.net;
 
 #if DEBUG
+    DotEnv.Load(options: new DotEnvOptions(envFilePaths: new[] { ".env.example" }));
     DotEnv.Load();
 #endif
 

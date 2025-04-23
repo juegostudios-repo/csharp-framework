@@ -40,14 +40,10 @@ namespace JuegoFramework.Helpers
                 controller.ControllerContext.HttpContext.Request.Headers.Append("access_token", accessToken);
             }
 
-            var authAttributes = controllerMetadata.MethodInfo.DeclaringType?
-                .GetCustomAttributes<TypeFilterAttribute>(true)
-                .Where(attr => attr.ImplementationType == typeof(UserAuth))
-                .Concat(
-                    controllerMetadata.MethodInfo
-                    .GetCustomAttributes<TypeFilterAttribute>(true)
-                    .Where(attr => attr.ImplementationType == typeof(UserAuth))
-                );
+            var authAttributes = controllerMetadata.MethodInfo.GetCustomAttributes(typeof(IAsyncAuthorizationFilter), true)
+                .Concat(controllerMetadata.ControllerTypeInfo.GetCustomAttributes(typeof(IAsyncAuthorizationFilter), true))
+                .OfType<IAsyncAuthorizationFilter>()
+                .ToList();
 
             if (authAttributes != null)
             {
@@ -57,11 +53,11 @@ namespace JuegoFramework.Helpers
                     using (var scope = Global.ServiceProvider!.CreateScope())
                     {
                         var scopedProvider = scope.ServiceProvider;
-                        var authInstance = (IFilterMetadata)scopedProvider.GetRequiredService(authAttribute.ImplementationType);
+                        var authInstance = (IFilterMetadata)scopedProvider.GetRequiredService(authAttribute.GetType());
 
                         var authFilterContext = new AuthorizationFilterContext(
                             new ActionContext(controller.ControllerContext.HttpContext, new RouteData(), controllerMetadata),
-                            new IFilterMetadata[] { authInstance }
+                            [authInstance]
                         );
 
                         // Cast to IAsyncAuthorizationFilter or IAuthorizationFilter
