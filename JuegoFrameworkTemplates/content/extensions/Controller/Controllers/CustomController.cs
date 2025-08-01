@@ -37,7 +37,7 @@ namespace ProjectName.Controllers
             catch (Exception e)
             {
                 Log.Error(e, "Error in CustomController.Get");
-                return ApiResponse.setResponse("INTERNAL_SERVER_ERROR");
+                return ApiResponse.setResponse("UNKNOWN_ERROR");
             }
         }
 
@@ -66,7 +66,7 @@ namespace ProjectName.Controllers
             catch (Exception e)
             {
                 Log.Error(e, "Error in CustomController.Post");
-                return ApiResponse.setResponse("INTERNAL_SERVER_ERROR");
+                return ApiResponse.setResponse("UNKNOWN_ERROR");
             }
         }
     }

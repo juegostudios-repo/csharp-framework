@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using JuegoFramework.Helpers;
 using ProjectName.Models;
 using System.Text.Json;
-using Microsoft.AspNetCore.Identity;
 
 namespace ProjectName.Controllers
 {
@@ -26,7 +25,7 @@ namespace ProjectName.Controllers
             catch (Exception e)
             {
                 Log.Error(e, "Error in UserController.Login");
-                return ApiResponse.setResponse("INTERNAL_SERVER_ERROR");
+                return ApiResponse.setResponse("UNKNOWN_ERROR");
             }
         }
 
@@ -43,7 +42,7 @@ namespace ProjectName.Controllers
             catch (Exception e)
             {
                 Log.Error(e, "Error in UserController.Logout");
-                return ApiResponse.setResponse("INTERNAL_SERVER_ERROR");
+                return ApiResponse.setResponse("UNKNOWN_ERROR");
             }
         }
 
