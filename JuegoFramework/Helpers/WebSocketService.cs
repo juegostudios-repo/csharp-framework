@@ -32,7 +32,11 @@ namespace JuegoFramework.Helpers
                 while (webSocket.State == WebSocketState.Open)
                 {
                     var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-                    await WebSocketHelper.HandleSocketMessage(Encoding.UTF8.GetString(buffer, 0, result.Count));
+                    var response = await WebSocketHelper.HandleSocketMessage(Encoding.UTF8.GetString(buffer, 0, result.Count));
+                    if (response != null && !string.IsNullOrWhiteSpace(response.RequestId))
+                    {
+                        await SendMessageToSocket(connectionId, response);
+                    }
 
                     // If the client sent a close message, then close the connection.
                     if (result.MessageType == WebSocketMessageType.Close)
