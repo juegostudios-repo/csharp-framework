@@ -1,6 +1,9 @@
 using ProjectName.Library;
 using JuegoFramework.Helpers;
 using dotenv.net;
+#if DbTypeMySql
+using Dapper;
+#endif
 
 //-:cnd:noEmit
 #if DEBUG
@@ -17,6 +20,11 @@ builder.Services.AddScoped<IWebSocketHandler, WebSocketHandler>();
 Application.AddAuthToSwagger(builder, "access_token");
 
 var app = Application.InitApp(builder);
+
+#if DbTypeMySql
+// Dapper default type handler for MySqlDateTime
+SqlMapper.AddTypeHandler(new MySqlDateTimeHandler());
+#endif
 
 app.UseMiddleware<ApiLoggingMiddleware>();
 

@@ -37,7 +37,7 @@ namespace ProjectName.Migrations
         {
             if (!options.IsConfigured)
             {
-                string? connectionString = Global.Configuration?.GetConnectionString("DefaultConnection");
+                string? connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
 
                 if (connectionString == null)
                 {
