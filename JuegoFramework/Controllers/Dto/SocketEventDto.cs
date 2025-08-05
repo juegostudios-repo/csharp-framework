@@ -35,9 +35,9 @@ namespace JuegoFramework.Controllers.Dto
     public class SocketEventResponseDto
     {
         [JsonPropertyName("request_id")]
-        public string? RequestId { get; set; }
+        public required string RequestId { get; set; }
 
         [JsonPropertyName("body")]
-        public object? Body { get; set; }
+        public required object Body { get; set; }
     }
 }

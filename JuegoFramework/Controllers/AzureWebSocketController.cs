@@ -51,7 +51,7 @@ namespace JuegoFramework.Controllers
                     break;
                 case "MESSAGE":
                     var response = await WebSocketHelper.HandleSocketMessage(body);
-                    if (response != null && !string.IsNullOrWhiteSpace(response.RequestId))
+                    if (response != null)
                     {
                         await WebSocketService.SendMessageToSocket(connectionId, response);
                     }

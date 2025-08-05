@@ -33,7 +33,7 @@ namespace JuegoFramework.Helpers
                 {
                     var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
                     var response = await WebSocketHelper.HandleSocketMessage(Encoding.UTF8.GetString(buffer, 0, result.Count));
-                    if (response != null && !string.IsNullOrWhiteSpace(response.RequestId))
+                    if (response != null)
                     {
                         await SendMessageToSocket(connectionId, response);
                     }

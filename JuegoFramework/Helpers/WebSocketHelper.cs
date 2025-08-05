@@ -14,13 +14,18 @@ namespace JuegoFramework.Helpers
                 var messageData = JsonSerializer.Deserialize<SocketEventDto>(message) ?? throw new ArgumentNullException(nameof(message), "The Message is not set.");
                 var result = await RouteExecutor.Execute(messageData.Method, messageData.Action, messageData.Body.ToString(), messageData.Headers.AccessToken);
                 Log.Information($"{requestId} Result: {JsonSerializer.Serialize(result.Value)}");
-                
-                var response = WebSocketResponseHelper.FormatResponse(result);
-                return new SocketEventResponseDto
+
+                if (!string.IsNullOrWhiteSpace(messageData.RequestId))
                 {
-                    RequestId = messageData.RequestId,
-                    Body = response.Value
-                };
+                    var response = WebSocketResponseHelper.FormatResponse(result);
+                    return new SocketEventResponseDto
+                    {
+                        RequestId = messageData.RequestId,
+                        Body = response.Value
+                    };
+                }
+
+                return null;
             }
             catch (Exception e)
             {

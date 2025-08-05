@@ -24,7 +24,7 @@ namespace JuegoFramework.Controllers
             else if (request.EventType == "MESSAGE")
             {
                 var response = await WebSocketHelper.HandleSocketMessage(request.Body);
-                if (response != null && !string.IsNullOrWhiteSpace(response.RequestId))
+                if (response != null)
                 {
                     await WebSocketService.SendMessageToSocket(request.ConnectionId, response);
                 }
