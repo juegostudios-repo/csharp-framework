@@ -50,7 +50,11 @@ namespace JuegoFramework.Controllers
                     await webSocketHandlerService.ConnectSocket(userid, connectionId);
                     break;
                 case "MESSAGE":
-                    await WebSocketHelper.HandleSocketMessage(body);
+                    var response = await WebSocketHelper.HandleSocketMessage(body);
+                    if (response != null)
+                    {
+                        await WebSocketService.SendMessageToSocket(connectionId, response);
+                    }
                     break;
                 case "DISCONNECTED":
                     await webSocketHandlerService.DisconnectSocket(connectionId);

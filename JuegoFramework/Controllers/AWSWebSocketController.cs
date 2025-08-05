@@ -23,7 +23,11 @@ namespace JuegoFramework.Controllers
             }
             else if (request.EventType == "MESSAGE")
             {
-                await WebSocketHelper.HandleSocketMessage(request.Body);
+                var response = await WebSocketHelper.HandleSocketMessage(request.Body);
+                if (response != null)
+                {
+                    await WebSocketService.SendMessageToSocket(request.ConnectionId, response);
+                }
             }
             else if (request.EventType == "DISCONNECT")
             {
