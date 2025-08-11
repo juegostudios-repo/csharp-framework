@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "jwt-updater": {
+      "version": "0.0.1",
+      "commands": [
+        "jwt-up"
+      ]
+    },
+    "cs-project": {
+      "version": "0.0.1",
+      "commands": [
+        "cs-project"
+      ]
+    }
+  }
+}
