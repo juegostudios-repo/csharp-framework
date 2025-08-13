@@ -13,6 +13,12 @@
       "commands": [
         "cs-project"
       ]
+    },
+    "cjs-tools": {
+      "version": "0.0.1",
+      "commands": [
+        "cjs"
+      ]
     }
   }
 }
