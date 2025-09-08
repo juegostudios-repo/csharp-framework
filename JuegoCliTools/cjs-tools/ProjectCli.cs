@@ -17,6 +17,94 @@ public class ProjectCli
             return 1;
         }
 
+        // Check if JuegoFramework.Templates is installed
+        var templateInstalled = false;
+        var psiList = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            Arguments = "new --list",
+            RedirectStandardOutput = true,
+            UseShellExecute = false
+        };
+        using (var processList = Process.Start(psiList))
+        {
+            var output = processList.StandardOutput.ReadToEnd();
+            processList.WaitForExit();
+            if (output.Contains("juegoframework-project"))
+            {
+                templateInstalled = true;
+            }
+        }
+
+        if (!templateInstalled)
+        {
+            Logger.Log("JuegoFramework.Templates is not installed. Install it now? (y/n)");
+
+            var key = Console.ReadKey();
+            Logger.Log();
+            if (key.KeyChar == 'y' || key.KeyChar == 'Y')
+            {
+                var psiInstall = new ProcessStartInfo
+                {
+                    FileName = "dotnet",
+                    Arguments = "new -i JuegoFramework.Templates",
+                    RedirectStandardOutput = false,
+                    UseShellExecute = true
+                };
+                var processInstall = Process.Start(psiInstall);
+                processInstall.WaitForExit();
+                if (processInstall.ExitCode != 0)
+                {
+                    Logger.Error("Failed to install JuegoFramework.Templates.");
+                    return processInstall.ExitCode;
+                }
+            }
+            else
+            {
+                Logger.Error("Cannot continue without JuegoFramework.Templates.");
+                return 1;
+            }
+        }
+        else
+        {
+            Logger.Log("Checking for updates to JuegoFramework.Templates...");
+            var psiUpdateCheck = new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = " new update --check-only",
+                RedirectStandardOutput = true,
+                UseShellExecute = false
+            };
+            using (var processUpdateCheck = Process.Start(psiUpdateCheck))
+            {
+                var updateOutput = processUpdateCheck.StandardOutput.ReadToEnd();
+                processUpdateCheck.WaitForExit();
+                if (!updateOutput.Contains("packages are up-to-date") && updateOutput.Contains("available") && updateOutput.Contains("JuegoFramework.Templates"))
+                {
+                    Logger.Warning("An update for JuegoFramework.Templates is available. Update now? (y/n)");
+                    var key = Console.ReadKey();
+                    Logger.Log();
+                    if (key.KeyChar == 'y' || key.KeyChar == 'Y')
+                    {
+                        var psiUpdate = new ProcessStartInfo
+                        {
+                            FileName = "dotnet",
+                            Arguments = "new --update-apply JuegoFramework.Templates",
+                            RedirectStandardOutput = false,
+                            UseShellExecute = true
+                        };
+                        var processUpdate = Process.Start(psiUpdate);
+                        processUpdate.WaitForExit();
+                        if (processUpdate.ExitCode != 0)
+                        {
+                            Logger.Error("Failed to update JuegoFramework.Templates.");
+                            return processUpdate.ExitCode;
+                        }
+                    }
+                }
+            }
+        }
+
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
