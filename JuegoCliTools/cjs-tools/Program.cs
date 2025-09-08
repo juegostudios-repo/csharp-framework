@@ -6,8 +6,6 @@ namespace CjsTools;
 
 internal class Program
 {
-
-
     static async Task<int> Main(string[] args)
     {
         if (args.Length == 0)
