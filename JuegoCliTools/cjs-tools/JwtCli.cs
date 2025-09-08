@@ -18,7 +18,7 @@ public class JwtCli
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error: {ex.Message}");
+            Logger.Error($"Error: {ex.Message}");
             return 1;
         }
     }
@@ -47,7 +47,7 @@ public class JwtCli
             throw new FileNotFoundException($"file not found at {appsettingsPath}");
         }
 
-        Console.WriteLine("Generating JWT secret");
+        Logger.Log("Generating JWT secret");
 
         var jsonContent = await File.ReadAllTextAsync(appsettingsPath);
         var config = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonContent);
@@ -68,6 +68,6 @@ public class JwtCli
 
         await File.WriteAllTextAsync(appsettingsPath, updatedJson);
 
-        Console.WriteLine($"JWT secret updated successfully. New secret: {newSecret}");
+        Logger.Info($"JWT secret updated successfully. New secret: {newSecret}");
     }
 }
