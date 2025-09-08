@@ -37,8 +37,9 @@
           "condition": "(!DbTypeMySql)",
           "exclude": [
             "Library/SqlLib/**",
-            "Migration/**",
-            "Library/UtilityLib/MySqlDateTimeHandler.cs"
+            "Migrations/**",
+            "Library/UtilityLib/MySqlDateTimeHandler.cs",
+            "Tasks/SocketPing.cs"
           ]
         }
       ]

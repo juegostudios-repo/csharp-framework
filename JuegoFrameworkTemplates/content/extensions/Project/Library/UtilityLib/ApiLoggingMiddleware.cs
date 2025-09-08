@@ -32,6 +32,7 @@ public class ApiLoggingMiddleware
         var accessToken = context.Request.Headers.TryGetValue("access_token", out var authorization) ? authorization.ToString() : "";
         User? user = null;
 
+#if DbTypeMySql
         if (accessToken != "")
         {
             user = await UserLib.FindOne(new
@@ -40,8 +41,10 @@ public class ApiLoggingMiddleware
             });
         }
 
+#endif
         var requestBodyContent = await ReadRequestBody(context);
 
+#if DbTypeMySql
         var apiLogEntry = new ApiLog
         {
             UserId = user?.UserId,
@@ -58,6 +61,7 @@ public class ApiLoggingMiddleware
 
         long apiLogId = await ApiLogLib.Insert(apiLogEntry);
 
+#endif
         using (var newResponseBodyStream = new MemoryStream())
         {
             context.Response.Body = newResponseBodyStream;
@@ -76,6 +80,7 @@ public class ApiLoggingMiddleware
                 deserizedResponseBody = responseBodyContent;
             }
 
+#if DbTypeMySql
             await ApiLogLib.Update(new
             {
                 api_log_id = apiLogId,
@@ -89,6 +94,7 @@ public class ApiLoggingMiddleware
                 }, _jsonSerializerOptions)
             });
 
+#endif
             await newResponseBodyStream.CopyToAsync(originalResponseBodyStream);
             context.Response.Body = originalResponseBodyStream;
         }
