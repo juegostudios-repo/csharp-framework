@@ -10,6 +10,7 @@ public static class Constants
         public const int COMPLETED = 4;
         public const int DELETED = 5;
         public const int INACTIVE = 6;
+        public const int BLOCKED = 7;
     }
 
     public static class SOCKET_EVENT
