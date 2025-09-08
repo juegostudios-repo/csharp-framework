@@ -10,7 +10,7 @@ public class UserLib : MySqlLib<User>
     {
         try
         {
-            var userId = JwtHelper.ValidateJwtToken(token)?.Data as int?;
+            dynamic? userId = JwtHelper.ValidateJwtToken(token)?.Data;
 
             if (userId == null)
             {
