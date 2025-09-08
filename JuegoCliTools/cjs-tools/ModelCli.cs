@@ -228,7 +228,8 @@ namespace {projectName}.Models
             return Regex.Replace(str, @"(^|_|-)(\w)", m => m.Groups[2].Value.ToUpper());
         }
 
-        private static string ParseArgument(string[] args, string shortName, string longName) {
+        private static string ParseArgument(string[] args, string shortName, string longName)
+        {
             return args.SkipWhile(a => a != shortName && a != longName).Skip(1).FirstOrDefault();
         }
 
@@ -248,7 +249,7 @@ namespace {projectName}.Models
             Logger.Log("  -null, --nullable               Makes the column nullable. (optional)\n");
             Logger.Log("Supported data types: string, int, long, bool, datetime, text, decimal\n");
         }
-        
+
         private static void PrintCreateHelp()
         {
             Logger.Log("\nUsage: cjs model create [options]\n");
