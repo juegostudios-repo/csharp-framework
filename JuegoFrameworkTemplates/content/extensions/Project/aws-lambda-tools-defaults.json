@@ -9,7 +9,7 @@
   "region": "ap-south-1",
   "configuration": "Release",
   "s3-bucket": "team2-serverless-bucket",
-  "s3-prefix": "638-example-project/",
+  "s3-prefix": "000-example-project/",
   "template": "serverless.template",
   "template-parameters": ""
 }
