@@ -19,6 +19,13 @@ public class ApiLoggingMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        // Skip logging for the root path (ELB health check)
+        if (context.Request.Path == "/")
+        {
+            await _next(context);
+            return;
+        }
+
         var originalRequestBodyStream = context.Request.Body;
         var originalResponseBodyStream = context.Response.Body;
 
@@ -43,7 +50,7 @@ public class ApiLoggingMiddleware
             Request = JsonSerializer.Serialize(new
             {
                 headers = context.Request.Headers.ToDictionary(h => h.Key, h => string.Join(", ", h.Value!)),
-                body = requestBodyContent != "" ? JsonSerializer.Deserialize<object>(requestBodyContent, _jsonSerializerOptions) : null,
+                body = IsJsonContentType(context.Request.ContentType) ? JsonSerializer.Deserialize<object>(requestBodyContent, _jsonSerializerOptions) : null,
             }, _jsonSerializerOptions),
             Response = "",
             CreatedAt = DateTime.UtcNow
@@ -62,7 +69,7 @@ public class ApiLoggingMiddleware
 
             try
             {
-                deserizedResponseBody = JsonSerializer.Deserialize<object>(responseBodyContent, _jsonSerializerOptions) ?? responseBodyContent;
+                deserizedResponseBody = IsJsonContentType(context.Response.ContentType) ? JsonSerializer.Deserialize<object>(responseBodyContent, _jsonSerializerOptions) ?? responseBodyContent : responseBodyContent;
             }
             catch (JsonException)
             {
@@ -87,6 +94,11 @@ public class ApiLoggingMiddleware
         }
 
         context.Request.Body = originalRequestBodyStream;
+    }
+
+    private static bool IsJsonContentType(string? contentType)
+    {
+        return !string.IsNullOrEmpty(contentType) && contentType.Contains("application/json", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<string> ReadRequestBody(HttpContext context)
