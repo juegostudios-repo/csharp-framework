@@ -36,9 +36,9 @@
         {
           "condition": "(!DbTypeMySql)",
           "exclude": [
-            "Library/MySqlLib/**",
+            "Library/SqlLib/**",
             "Migration/**",
-            "MySqlDateTimeHandler.cs"
+            "Library/UtilityLib/MySqlDateTimeHandler.cs"
           ]
         }
       ]
