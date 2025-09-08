@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "cjs-tools": {
+      "version": "0.0.1",
+      "commands": [
+        "cjs"
+      ]
+    }
+  }
+}
