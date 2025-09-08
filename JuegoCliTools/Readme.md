@@ -10,6 +10,10 @@ Creates new projects using the `juegoframework-project` template and automatical
 ### 2. JWT Updater (`jwt-up`)
 Updates JWT secrets in `appsettings.json` files.
 
+### 3. Database model creater (`model`)
+Create Database model class with primary key and timestamps. (`create`)
+Add column to model class with given data type. (`add-column`)
+
 
 ## Development
 
@@ -25,6 +29,9 @@ dotnet build
 dotnet run jwt-up
 # for Project Cli
 dotnet run project -n <project name> <template options>
+# for Model Cli
+dotnet run model create -n <table_name>
+dotnet run model add-column -n <column_name> -t <table_name> -d <data_type> 
 ```
 
 ## Installation
@@ -60,6 +67,8 @@ dotnet tool restore
 ```bash
 dotnet cjs jwt-up 
 dotnet cjs project -h
+dotnet cjs model create -n <table_name>
+dotnet cjs model add-column -n <column_name> -t <table_name> -d <data_type> 
 ```
 
 ### Install Tools Globally
@@ -84,6 +93,8 @@ export PATH="$PATH:/home/$USER/.dotnet/tools"
 ```bash
 cjs project -h
 cjs jwt-up
+cjs model create -n <table_name>
+cjs model add-column -n <column_name> -t <table_name> -d <data_type> 
 ```
 
 ## Usage
