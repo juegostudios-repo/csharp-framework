@@ -6,10 +6,13 @@ namespace ProjectName.Library
 {
     public class WebSocketHandler : IWebSocketHandler
     {
+#if DbTypeMySql
         private const bool _enableApiLogging = true;
 
+#endif
         public override async Task ConnectSocket(string accessToken, string connectionId)
         {
+#if DbTypeMySql
             if (_enableApiLogging)
             {
                 var user = await UserLib.FindOne(new
@@ -29,10 +32,12 @@ namespace ProjectName.Library
             }
 
             await UserLib.ConnectSocket(accessToken, connectionId);
+#endif
         }
 
         public override async Task DisconnectSocket(string connectionId)
         {
+#if DbTypeMySql
             if (_enableApiLogging)
             {
                 var user = await UserLib.FindOne(new
@@ -52,10 +57,12 @@ namespace ProjectName.Library
             }
 
             await UserLib.DisconnectSocket(connectionId);
+#endif
         }
 
         public static async Task SendMessageToSocket(string connectionId, object message)
         {
+#if DbTypeMySql
             if (_enableApiLogging)
             {
                 var user = await UserLib.FindOne(new
@@ -76,6 +83,7 @@ namespace ProjectName.Library
                 });
             }
 
+#endif
             await WebSocketService.SendMessageToSocket(connectionId, message);
         }
     }

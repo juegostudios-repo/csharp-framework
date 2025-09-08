@@ -19,12 +19,20 @@ public class ApiLoggingMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        // Skip logging for the root path (ELB health check)
+        if (context.Request.Path == "/")
+        {
+            await _next(context);
+            return;
+        }
+
         var originalRequestBodyStream = context.Request.Body;
         var originalResponseBodyStream = context.Response.Body;
 
         var accessToken = context.Request.Headers.TryGetValue("access_token", out var authorization) ? authorization.ToString() : "";
         User? user = null;
 
+#if DbTypeMySql
         if (accessToken != "")
         {
             user = await UserLib.FindOne(new
@@ -33,8 +41,10 @@ public class ApiLoggingMiddleware
             });
         }
 
+#endif
         var requestBodyContent = await ReadRequestBody(context);
 
+#if DbTypeMySql
         var apiLogEntry = new ApiLog
         {
             UserId = user?.UserId,
@@ -43,7 +53,7 @@ public class ApiLoggingMiddleware
             Request = JsonSerializer.Serialize(new
             {
                 headers = context.Request.Headers.ToDictionary(h => h.Key, h => string.Join(", ", h.Value!)),
-                body = requestBodyContent != "" ? JsonSerializer.Deserialize<object>(requestBodyContent, _jsonSerializerOptions) : null,
+                body = IsJsonContentType(context.Request.ContentType) ? JsonSerializer.Deserialize<object>(requestBodyContent, _jsonSerializerOptions) : null,
             }, _jsonSerializerOptions),
             Response = "",
             CreatedAt = DateTime.UtcNow
@@ -51,6 +61,7 @@ public class ApiLoggingMiddleware
 
         long apiLogId = await ApiLogLib.Insert(apiLogEntry);
 
+#endif
         using (var newResponseBodyStream = new MemoryStream())
         {
             context.Response.Body = newResponseBodyStream;
@@ -62,13 +73,14 @@ public class ApiLoggingMiddleware
 
             try
             {
-                deserizedResponseBody = JsonSerializer.Deserialize<object>(responseBodyContent, _jsonSerializerOptions) ?? responseBodyContent;
+                deserizedResponseBody = IsJsonContentType(context.Response.ContentType) ? JsonSerializer.Deserialize<object>(responseBodyContent, _jsonSerializerOptions) ?? responseBodyContent : responseBodyContent;
             }
             catch (JsonException)
             {
                 deserizedResponseBody = responseBodyContent;
             }
 
+#if DbTypeMySql
             await ApiLogLib.Update(new
             {
                 api_log_id = apiLogId,
@@ -82,11 +94,17 @@ public class ApiLoggingMiddleware
                 }, _jsonSerializerOptions)
             });
 
+#endif
             await newResponseBodyStream.CopyToAsync(originalResponseBodyStream);
             context.Response.Body = originalResponseBodyStream;
         }
 
         context.Request.Body = originalRequestBodyStream;
+    }
+
+    private static bool IsJsonContentType(string? contentType)
+    {
+        return !string.IsNullOrEmpty(contentType) && contentType.Contains("application/json", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<string> ReadRequestBody(HttpContext context)

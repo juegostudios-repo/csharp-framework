@@ -26,7 +26,12 @@ namespace ProjectName.Models
 
         [StringLength(255)]
         [Column("connection_id")]
-        public string? ConnectionId { get; set; }
+        public string ConnectionId { get; set; } = string.Empty;
+
+        [Required]
+        [StringLength(255)]
+        [Column("device_id")]
+        public required string DeviceId { get; set; }
 
         [Required]
         [Column("status")]

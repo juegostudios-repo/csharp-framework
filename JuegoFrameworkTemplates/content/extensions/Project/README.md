@@ -62,5 +62,5 @@ AZURE_WEBSOCKET_HUB = "xyz" | Don't set | Required if USE_WEBSOCKET_SYSTEM = "AZ
 
 Serverless Deployment
 ```sh
-dotnet lambda deploy-serverless example-project-638
+dotnet lambda deploy-serverless example-project-000
 ```

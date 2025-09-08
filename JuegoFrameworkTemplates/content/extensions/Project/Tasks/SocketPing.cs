@@ -8,9 +8,6 @@ namespace ProjectName.Tasks
     {
         public override TimeSpan Interval => TimeSpan.FromSeconds(Constants.CRON_TIMER.SOCKET_PING_TIME);
 
-        // Uncomment the line below if you want to use a cron expression instead of an interval and remove the Interval property.
-        // public override string Expression => "*/10 * * * * *";
-
         private readonly Serilog.ILogger _logger;
         public SocketPing()
         {
