@@ -20,6 +20,7 @@ namespace ProjectName.Library
             return (string)authData.Data == "test" ? new User
             {
                 UserName = (string)authData.Data,
+                DeviceId = string.Empty,
             } : null;
 #endif
         }
