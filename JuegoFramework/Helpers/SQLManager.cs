@@ -573,31 +573,70 @@ namespace JuegoFramework.Helpers
             return await Execute(sql, []);
         }
 
-        public static async Task Transaction(Func<Task> action)
+        public static Task Transaction(
+            Func<Task> action,
+            IsolationLevel? isolationLevel = null,
+            CancellationToken cancellationToken = default)
         {
+            return Transaction<object?>(async () =>
+            {
+                await action();
+                return null;
+            }, isolationLevel, cancellationToken);
+        }
+
+        public static async Task<T> Transaction<T>(
+            Func<Task<T>> action,
+            IsolationLevel? isolationLevel = null,
+            CancellationToken cancellationToken = default)
+        {
+            var existing = TransactionContextManager.Current;
+
+            // Nested: create a savepoint on the outer transaction. Inner failures roll back only to the savepoint; the outer commit/rollback governs the rest.
+            if (existing is not null)
+            {
+                var savepoint = "sp_" + Guid.NewGuid().ToString("N");
+                await existing.Value.Transaction.SaveAsync(savepoint, cancellationToken);
+                try
+                {
+                    var result = await action();
+                    await existing.Value.Transaction.ReleaseAsync(savepoint, cancellationToken);
+                    return result;
+                }
+                catch
+                {
+                    await existing.Value.Transaction.RollbackAsync(savepoint, cancellationToken);
+                    throw;
+                }
+            }
+
             using var connection = OpenConnection();
 
             var stopwatch = Stopwatch.StartNew();
-            await connection.OpenAsync();
+            await connection.OpenAsync(cancellationToken);
             stopwatch.Stop();
             Log.Information($"Opened connection in {stopwatch.ElapsedMilliseconds} ms");
 
-            using var transaction = await connection.BeginTransactionAsync();
+            using var transaction = isolationLevel is null
+                ? await connection.BeginTransactionAsync(cancellationToken)
+                : await connection.BeginTransactionAsync(isolationLevel.Value, cancellationToken);
 
             TransactionContextManager.Current = (connection, transaction);
 
             try
             {
-                await action();
-                await transaction.CommitAsync();
+                var result = await action();
+                await transaction.CommitAsync(cancellationToken);
+                return result;
             }
-            catch (Exception)
+            catch
             {
-                await transaction.RollbackAsync();
-                throw new Exception("Transaction failed");
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
             }
             finally
             {
+                TransactionContextManager.Current = null;
                 await connection.CloseAsync();
             }
         }

@@ -145,12 +145,122 @@ public class SQLManagerIntegrationTests : IAsyncLifetime
                     throw new Exception("Break transaction with error");
                 });
             } catch (Exception e) {
-                Assert.Equal("Transaction failed", e.Message);
+                Assert.Equal("Break transaction with error", e.Message);
             }
 
             var count = await SQLManager.Query<Counter>("SELECT count(*) as Count FROM test_entities");
             Assert.Equal(2, count[0].Count);
         }
+    }
+
+    [Fact]
+    public async Task TransactionGenericReturnsValue()
+    {
+        var insertedId = await SQLManager.Transaction(async () =>
+        {
+            var id = await SQLManager.Insert<TestEntity>(new Dictionary<string, object?>
+            {
+                { "name", "Test_TransactionGeneric" }
+            });
+            return id;
+        });
+
+        Assert.True(insertedId > 0);
+
+        var found = await SQLManager.FindOne<TestEntity>(new { id = insertedId });
+        Assert.NotNull(found);
+        Assert.Equal("Test_TransactionGeneric", found.Name);
+    }
+
+    [Fact]
+    public async Task NestedTransactionInnerFailureKeepsOuterCommit()
+    {
+        await SQLManager.Transaction(async () =>
+        {
+            await SQLManager.Insert<TestEntity>(new Dictionary<string, object?>
+            {
+                { "name", "Test_NestedOuterKept" }
+            });
+
+            try
+            {
+                await SQLManager.Transaction(async () =>
+                {
+                    await SQLManager.Insert<TestEntity>(new Dictionary<string, object?>
+                    {
+                        { "name", "Test_NestedInnerRolledBack" }
+                    });
+                    throw new Exception("inner fails");
+                });
+            }
+            catch (Exception e)
+            {
+                Assert.Equal("inner fails", e.Message);
+            }
+        });
+
+        var rows = await SQLManager.Query<TestEntity>("SELECT * FROM test_entities ORDER BY id");
+        Assert.Contains(rows, r => r.Name == "Test_NestedOuterKept");
+        Assert.DoesNotContain(rows, r => r.Name == "Test_NestedInnerRolledBack");
+    }
+
+    [Fact]
+    public async Task NestedTransactionOuterFailureRollsBackEverything()
+    {
+        try
+        {
+            await SQLManager.Transaction(async () =>
+            {
+                await SQLManager.Insert<TestEntity>(new Dictionary<string, object?>
+                {
+                    { "name", "Test_NestedOuterRolledBack" }
+                });
+
+                await SQLManager.Transaction(async () =>
+                {
+                    await SQLManager.Insert<TestEntity>(new Dictionary<string, object?>
+                    {
+                        { "name", "Test_NestedInnerCommittedThenRolledBack" }
+                    });
+                });
+
+                throw new Exception("outer fails after inner success");
+            });
+        }
+        catch (Exception e)
+        {
+            Assert.Equal("outer fails after inner success", e.Message);
+        }
+
+        var rows = await SQLManager.Query<TestEntity>("SELECT * FROM test_entities");
+        Assert.DoesNotContain(rows, r => r.Name == "Test_NestedOuterRolledBack");
+        Assert.DoesNotContain(rows, r => r.Name == "Test_NestedInnerCommittedThenRolledBack");
+    }
+
+    [Fact]
+    public async Task TransactionCurrentIsClearedAfterCompletion()
+    {
+        await SQLManager.Transaction(async () =>
+        {
+            Assert.NotNull(TransactionContextManager.Current);
+            await Task.CompletedTask;
+        });
+        Assert.Null(TransactionContextManager.Current);
+
+        try
+        {
+            await SQLManager.Transaction(async () =>
+            {
+                Assert.NotNull(TransactionContextManager.Current);
+                await Task.CompletedTask;
+                throw new Exception("boom");
+            });
+        }
+        catch
+        {
+            // expected
+        }
+        Assert.Null(TransactionContextManager.Current);
     }
 
     [Fact]
