@@ -28,7 +28,15 @@ namespace JuegoFramework.Helpers
             var controllerType = controllerMetadata.ControllerTypeInfo.AsType();
             MethodInfo methodInfo = controllerMetadata.MethodInfo;
 
-            var controller = ActivatorUtilities.CreateInstance(Global.ServiceProvider!, controllerType) as ControllerBase ?? throw new Exception("Route not found");
+            // One DI scope per routed message, mirroring MVC's per-request scope, so the
+            // controller and its scoped dependencies (e.g. scoped services, DbContext)
+            // resolve correctly. Building the controller from the root provider throws on
+            // scoped services under scope validation (Development) and silently shares them
+            // as singletons in Production. The scope lives until the action completes below.
+            using var scope = Global.ServiceProvider!.CreateScope();
+            var serviceProvider = scope.ServiceProvider;
+
+            var controller = ActivatorUtilities.CreateInstance(serviceProvider, controllerType) as ControllerBase ?? throw new Exception("Route not found");
 
             if (accessToken != null)
             {
@@ -49,31 +57,27 @@ namespace JuegoFramework.Helpers
             {
                 foreach (var authAttribute in authAttributes)
                 {
-                    // Create a new scope for resolving the service
-                    using (var scope = Global.ServiceProvider!.CreateScope())
+                    // Resolve the auth filter from the same per-message scope as the controller.
+                    var authInstance = (IFilterMetadata)serviceProvider.GetRequiredService(authAttribute.GetType());
+
+                    var authFilterContext = new AuthorizationFilterContext(
+                        new ActionContext(controller.ControllerContext.HttpContext, new RouteData(), controllerMetadata),
+                        [authInstance]
+                    );
+
+                    // Cast to IAsyncAuthorizationFilter or IAuthorizationFilter
+                    if (authInstance is IAsyncAuthorizationFilter asyncAuthFilter)
                     {
-                        var scopedProvider = scope.ServiceProvider;
-                        var authInstance = (IFilterMetadata)scopedProvider.GetRequiredService(authAttribute.GetType());
+                        await asyncAuthFilter.OnAuthorizationAsync(authFilterContext);
+                    }
+                    else if (authInstance is IAuthorizationFilter syncAuthFilter)
+                    {
+                        syncAuthFilter.OnAuthorization(authFilterContext);
+                    }
 
-                        var authFilterContext = new AuthorizationFilterContext(
-                            new ActionContext(controller.ControllerContext.HttpContext, new RouteData(), controllerMetadata),
-                            [authInstance]
-                        );
-
-                        // Cast to IAsyncAuthorizationFilter or IAuthorizationFilter
-                        if (authInstance is IAsyncAuthorizationFilter asyncAuthFilter)
-                        {
-                            await asyncAuthFilter.OnAuthorizationAsync(authFilterContext);
-                        }
-                        else if (authInstance is IAuthorizationFilter syncAuthFilter)
-                        {
-                            syncAuthFilter.OnAuthorization(authFilterContext);
-                        }
-
-                        if (authFilterContext.Result != null)
-                        {
-                            return authFilterContext.Result;
-                        }
+                    if (authFilterContext.Result != null)
+                    {
+                        return authFilterContext.Result;
                     }
                 }
             }
