@@ -219,7 +219,8 @@ public static class Application
             });
         }
 
-        if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "SERVER")
+        var wsSystem = Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM");
+        if (wsSystem == "SERVER" || wsSystem == "SERVER_CLUSTER")
         {
             app.UseWebSockets();
             app.UseMiddleware<WebSocketMiddleware>();
@@ -254,6 +255,25 @@ public static class Application
         {
             ValidateEnvs("AZURE_WEBSOCKET_ENDPOINT", "AZURE_WEBSOCKET_ACCESS_TOKEN", "AZURE_WEBSOCKET_HUB");
         }
+
+        if (Environment.GetEnvironmentVariable("USE_WEBSOCKET_SYSTEM") == "SERVER_CLUSTER")
+        {
+            ValidateEnvs("REDIS_CONNECTION_STRING", "WEBSOCKET_URL");
+
+            // Subscribe this instance's channel so cross-instance sends are delivered.
+            WebSocketBackplane.StartAsync(WebSocketService.DeliverFromBackplane).GetAwaiter().GetResult();
+
+            // On scale-in, close held sockets and clear their connection_id rows.
+            var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+            lifetime.ApplicationStopping.Register(() => WebSocketService.DrainAllAsync().GetAwaiter().GetResult());
+        }
+
+        // Surface the effective WebSocket push path at startup so a misconfigured service is
+        // visible in logs — e.g. a CRON worker left on SERVER while the web tier runs
+        // SERVER_CLUSTER, which would silently fail to push (SERVER cron uses the HTTP bridge,
+        // SERVER_CLUSTER uses the Redis backplane; all services in a cluster must match).
+        Log.Information("WebSocket system: {WebSocketSystem}, MODE: {Mode}",
+            wsSystem ?? "(none)", Environment.GetEnvironmentVariable("MODE") ?? "WEB");
 
         return app;
     }
