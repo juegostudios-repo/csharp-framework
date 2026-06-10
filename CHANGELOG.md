@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.0.25 (2026-06-11)
+
+### Generalized cross-instance fan-out routing (`InstanceFanout<T>`)
+
+Some fan-outs need to process each recipient *before* the socket write — e.g. coalescing a high-frequency feed so each connection gets at most one batched message per window. `WebSocketBackplane` gives an application nowhere to do that: it delivers straight to *sockets*, with no project seam between "event produced" and "bytes written." So an app that needs it had to re-implement the backplane's instance routing in its own code: `GroupByInstance`, a parallel `…:inst:{id}` channel, a subscriber, and — easy to forget — the non-cluster special case (outside `SERVER_CLUSTER` the framework mints **bare** connection ids with no `{instanceId}:` prefix, which `GroupByInstance` silently drops). Forgetting that last part means the feed delivers nothing in single-instance mode while still working in cluster mode, so tests on a cluster harness pass.
+
+`InstanceFanout<T>` moves that routing — and the websocket-mode awareness — into the framework, once:
+
+- Construct with a channel base (e.g. `"march:inst"`) and a local sink `Action<string /*connectionId*/, T /*payload*/>`.
+- `RouteAsync(connectionIds, payload)` hands the payload to the sink on whichever instance owns each connection. Non-cluster modes: every connection is local, so the sink runs inline for all. `SERVER_CLUSTER`: locals run inline, remotes are batched per owning instance and forwarded over Redis, and the owning instance's subscriber runs the **same** sink on arrival.
+- `StartAsync()` subscribes this instance's channel (cluster-only; idempotent). Call once at startup.
+
+The payload `T` is serialized only when it crosses the wire to a remote instance; the local path passes the in-memory instance straight to the sink. Application code supplies only a payload and a sink — it never inspects `USE_WEBSOCKET_SYSTEM`, the connection-id format, or the channel.
+
+### Pluggable inline WebSocket message handler
+
+The WebSocket receive loop used to special-case exactly one message inline — the client ping (replied with a pong, no routing). Every other inbound message went through the full routing path (`WebSocketHelper` → `RouteExecutor`), which spins up a fresh DI scope and a new `DefaultHttpContext` per message and re-runs the auth filters. In `JWT_SQL` mode that means a database lookup on *every* routed socket message, with no per-connection auth cache.
+
+That is fine for ordinary request/response actions, but it is the wrong shape for high-frequency, fire-and-forget signals a client sends over the same socket (e.g. a viewport/area-of-interest heartbeat). At scale those would generate one auth DB lookup per message.
+
+This release adds an optional, additive hook so an application can handle such messages inline, using the identity already established at connect time:
+
+- New `WebSocketService.InlineMessageHandler` — a `Func<string /*connectionId*/, string /*rawMessage*/, Task<bool>>?`, defaulting to `null`. Set it once at startup.
+- It is invoked in the receive loop **after** the ping short-circuit and **before** the routing path. Return `true` to signal the message was consumed inline — the loop then does NOT route it and runs no per-message auth. Return `false` to fall through to normal routing, unchanged.
+- The handler receives the connect-time `connectionId` (already authenticated via `IWebSocketHandler.ConnectSocket`), so it never triggers `RouteExecutor`'s per-message `UserAuth` DB lookup.
+
+Fully backward compatible: when no handler is registered, the receive loop behaves exactly as before — ping is still answered inline, and every other message still routes through `RouteExecutor` unchanged.
+
 ## 1.0.23 (2026-05-14)
 
 ### SQLManager.Transaction now works the way you'd expect

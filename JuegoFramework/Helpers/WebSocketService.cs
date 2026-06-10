@@ -14,6 +14,55 @@ namespace JuegoFramework.Helpers
         // WebSocket forbids overlapping SendAsync calls.
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> SendLocks = new();
 
+        /// <summary>
+        /// Optional pluggable inline message handler, set by the application at startup
+        /// (defaults to null — when unset the receive loop behaves exactly as before).
+        ///
+        /// Contract:
+        /// - Invoked in the receive loop AFTER the ping short-circuit and BEFORE the
+        ///   <see cref="WebSocketHelper"/> → <see cref="RouteExecutor"/> routing path.
+        /// - Arguments are (connectionId, rawMessageText). The connectionId is the
+        ///   identity established at connect time (already authenticated via
+        ///   <c>IWebSocketHandler.ConnectSocket</c>); the handler runs with that identity
+        ///   in scope and does NOT trigger RouteExecutor's per-message UserAuth DB lookup.
+        /// - Return <c>true</c> when the handler CONSUMED the message: the loop
+        ///   short-circuits, the message is NOT routed and no per-message auth runs.
+        /// - Return <c>false</c> to fall through to normal routing unchanged.
+        /// This is purely additive: a registered handler that always returns false leaves
+        /// every existing message routing exactly as it was.
+        /// </summary>
+        public static Func<string, string, Task<bool>>? InlineMessageHandler { get; set; }
+
+        /// <summary>How an inbound (non-close-control) message should be dispatched.</summary>
+        public enum InboundDisposition
+        {
+            /// <summary>A ping envelope — reply pong inline, no routing.</summary>
+            Ping,
+            /// <summary>Consumed by <see cref="InlineMessageHandler"/> — no routing.</summary>
+            HandledInline,
+            /// <summary>Falls through to WebSocketHelper/RouteExecutor as before.</summary>
+            Route
+        }
+
+        // Decides what to do with a received message text. Extracted from the receive loop
+        // so the dispatch decision (ping inline -> inline handler -> route) is unit-testable
+        // without a live socket. Order is load-bearing: ping is checked first (preserving
+        // existing behavior), then the optional inline handler, then routing.
+        internal static async Task<InboundDisposition> ClassifyInboundAsync(string connectionId, string messageText)
+        {
+            if (WebSocketBackplane.IsPingMessage(messageText))
+            {
+                return InboundDisposition.Ping;
+            }
+
+            if (InlineMessageHandler != null && await InlineMessageHandler(connectionId, messageText))
+            {
+                return InboundDisposition.HandledInline;
+            }
+
+            return InboundDisposition.Route;
+        }
+
         public async Task HandleWebSocketAsync(HttpContext context)
         {
             var webSocketHandlerService = context.RequestServices.GetService(typeof(IWebSocketHandler)) as IWebSocketHandler ?? throw new InvalidOperationException("Unable to find websocket handler service.");
@@ -93,19 +142,26 @@ namespace JuegoFramework.Helpers
 
                     var messageText = Encoding.UTF8.GetString(buffer, 0, result.Count);
 
-                    if (WebSocketBackplane.IsPingMessage(messageText))
+                    switch (await ClassifyInboundAsync(connectionId, messageText))
                     {
-                        // Reset is implicit: the next loop iteration starts a fresh deadline. Reply
-                        // pong inline so the client can detect a dead connection. No routing.
-                        await DeliverLocalAsync(connectionId, Encoding.UTF8.GetBytes(WebSocketBackplane.PongMessage));
-                    }
-                    else
-                    {
-                        var response = await WebSocketHelper.HandleSocketMessage(messageText);
-                        if (response != null)
-                        {
-                            await SendMessageToSocket(connectionId, response);
-                        }
+                        case InboundDisposition.Ping:
+                            // Reset is implicit: the next loop iteration starts a fresh deadline. Reply
+                            // pong inline so the client can detect a dead connection. No routing.
+                            await DeliverLocalAsync(connectionId, Encoding.UTF8.GetBytes(WebSocketBackplane.PongMessage));
+                            break;
+
+                        case InboundDisposition.HandledInline:
+                            // The app's InlineMessageHandler consumed this message using the
+                            // connect-time connection identity. No routing, no per-message auth.
+                            break;
+
+                        default:
+                            var response = await WebSocketHelper.HandleSocketMessage(messageText);
+                            if (response != null)
+                            {
+                                await SendMessageToSocket(connectionId, response);
+                            }
+                            break;
                     }
 
                     // If the client sent a close message, then close the connection.
