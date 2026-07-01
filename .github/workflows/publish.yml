@@ -1,0 +1,64 @@
+name: Publish JuegoFramework
+
+# Publishes the JuegoFramework package to nuget.org when a vX.Y.Z tag is pushed.
+# Auth is keyless via NuGet Trusted Publishing: a short-lived GitHub OIDC token is
+# exchanged for a 1-hour nuget.org API key at publish time (no long-lived secret).
+#
+# One-time setup on nuget.org (Trusted Publishing policy):
+#   Repository Owner: juegostudios-repo
+#   Repository:       csharp-framework
+#   Workflow File:    publish.yml
+#   Environment:      (empty)
+# And add a GitHub Actions secret NUGET_USER = your nuget.org username (not email).
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# A re-pushed tag must not publish twice.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # required for the GitHub OIDC token used by trusted publishing
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Verify tag matches csproj <Version>
+        run: |
+          csproj="JuegoFramework/JuegoFramework.csproj"
+          version=$(grep -oPm1 '(?<=<Version>)[^<]+' "$csproj")
+          tag="${GITHUB_REF_NAME#v}"
+          echo "csproj version: $version"
+          echo "tag version:    $tag"
+          if [ "$version" != "$tag" ]; then
+            echo "::error::Tag v$tag does not match <Version>$version in $csproj. Aborting publish."
+            exit 1
+          fi
+
+      - name: Pack
+        run: dotnet pack JuegoFramework/JuegoFramework.csproj -c Release -o ./artifacts
+
+      # Request the temporary key immediately before pushing (valid ~1h, single use).
+      - name: NuGet login (OIDC -> temporary API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push
+        run: >
+          dotnet nuget push ./artifacts/*.nupkg
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
