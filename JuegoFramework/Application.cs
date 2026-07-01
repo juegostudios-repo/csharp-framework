@@ -47,7 +47,18 @@ public static class Application
 
         builder.Services.AddEndpointsApiExplorer();
 
-        builder.Services.AddOpenApi();
+        builder.Services.AddOpenApi(options =>
+        {
+            options.AddDocumentTransformer((document, context, cancellationToken) =>
+            {
+                var apiURL = Environment.GetEnvironmentVariable("API_URL");
+                if (!string.IsNullOrEmpty(apiURL))
+                {
+                    document.Servers = [new OpenApiServer { Url = apiURL }];
+                }
+                return Task.CompletedTask;
+            });
+        });
 
         var dbConnectionStringEnv = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
         if (!string.IsNullOrEmpty(dbConnectionStringEnv))

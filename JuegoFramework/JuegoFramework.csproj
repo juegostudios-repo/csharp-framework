@@ -24,6 +24,8 @@
     <PackageReference Include="Cronos" Version="0.8.4" />
     <PackageReference Include="Dapper" Version="2.1.79" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <!-- Pin patched Microsoft.OpenApi (>=2.7.5) to resolve GHSA-v5pm-xwqc-g5wc; AspNetCore.OpenApi 10.0.9 otherwise pulls the vulnerable 2.0.0 transitively -->
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.16.6" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="StackExchange.Redis" Version="3.0.11" />
