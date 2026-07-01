@@ -23,9 +23,10 @@ namespace JuegoFramework.Helpers
             {
                 if (FirebaseApp.DefaultInstance == null)
                 {
+                    var serviceAccountCred = CredentialFactory.FromFile<ServiceAccountCredential>(firebasePrivateKey);
                     FirebaseApp.Create(new AppOptions()
                     {
-                        Credential = GoogleCredential.FromFile(firebasePrivateKey)
+                        Credential = GoogleCredential.FromServiceAccountCredential(serviceAccountCred)
                     });
                     _isInitialized = true;
                     Log.Information("Firebase initialized successfully.");

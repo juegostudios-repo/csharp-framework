@@ -26,7 +26,7 @@ public class Redis()
         IDatabase _db = Database;
         prefix = redisPrefixKey + ":" + prefix;
         string json = JsonSerializer.Serialize(value);
-        await _db.StringSetAsync(key.Prepend(prefix + ":"), json, expiry);
+        await _db.StringSetAsync(key.Prepend(prefix + ":"), json, expiry, When.Always);
     }
 
     public static async Task<T?> Get<T>(RedisKey key, string prefix)

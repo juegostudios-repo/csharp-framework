@@ -1,7 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <OutputType>Library</OutputType>
@@ -15,21 +15,24 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AspNetCore.HealthChecks.MySql" Version="8.0.0" />
-    <PackageReference Include="AWSSDK.ApiGatewayManagementApi" Version="3.7.300.47" />
-    <PackageReference Include="AWSSDK.S3" Version="3.7.408" />
-    <PackageReference Include="Azure.Messaging.WebPubSub" Version="1.3.0" />
-    <PackageReference Include="Azure.Storage.Blobs" Version="12.20.0" />
+    <PackageReference Include="AspNetCore.HealthChecks.MySql" Version="9.0.0" />
+    <PackageReference Include="MySqlConnector" Version="2.6.1" />
+    <PackageReference Include="AWSSDK.ApiGatewayManagementApi" Version="3.7.502.63" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.511.8" />
+    <PackageReference Include="Azure.Messaging.WebPubSub" Version="1.6.0" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.29.1" />
     <PackageReference Include="Cronos" Version="0.8.4" />
-    <PackageReference Include="Dapper" Version="2.1.28" />
-    <PackageReference Include="Scalar.AspNetCore" Version="1.2.*" />
-    <PackageReference Include="Serilog.AspNetCore" Version="8.0.1" />
-    <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.3.1" />
-    <PackageReference Include="Amazon.Lambda.AspNetCoreServer.Hosting" Version="1.7.0" />
-    <PackageReference Include="FirebaseAdmin" Version="3.1.0" />
-    <PackageReference Include="Google.Apis.Auth" Version="1.69.0" />
+    <PackageReference Include="Dapper" Version="2.1.79" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <!-- Pin patched Microsoft.OpenApi (>=2.7.5) to resolve GHSA-v5pm-xwqc-g5wc; AspNetCore.OpenApi 10.0.9 otherwise pulls the vulnerable 2.0.0 transitively -->
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.16.6" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="StackExchange.Redis" Version="3.0.11" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.19.1" />
+    <PackageReference Include="Amazon.Lambda.AspNetCoreServer.Hosting" Version="2.1.0" />
+    <PackageReference Include="FirebaseAdmin" Version="3.5.0" />
+    <PackageReference Include="Google.Apis.Auth" Version="1.75.0" />
   </ItemGroup>
 
 </Project>

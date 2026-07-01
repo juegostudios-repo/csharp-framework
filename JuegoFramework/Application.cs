@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 using JuegoFramework.Helpers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 
 public static class Application
@@ -47,7 +47,18 @@ public static class Application
 
         builder.Services.AddEndpointsApiExplorer();
 
-        builder.Services.AddSwaggerGen();
+        builder.Services.AddOpenApi(options =>
+        {
+            options.AddDocumentTransformer((document, context, cancellationToken) =>
+            {
+                var apiURL = Environment.GetEnvironmentVariable("API_URL");
+                if (!string.IsNullOrEmpty(apiURL))
+                {
+                    document.Servers = [new OpenApiServer { Url = apiURL }];
+                }
+                return Task.CompletedTask;
+            });
+        });
 
         var dbConnectionStringEnv = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
         if (!string.IsNullOrEmpty(dbConnectionStringEnv))
@@ -135,29 +146,25 @@ public static class Application
 
     public static void AddAuthToSwagger(WebApplicationBuilder builder, string key)
     {
-        builder.Services.AddSwaggerGen(opt =>
+        builder.Services.AddOpenApi(options =>
         {
-            opt.SupportNonNullableReferenceTypes();
-            opt.AddSecurityDefinition(key, new OpenApiSecurityScheme
+            options.AddDocumentTransformer((document, context, cancellationToken) =>
             {
-                In = ParameterLocation.Header,
-                Description = "Please enter " + key,
-                Name = key,
-                Type = SecuritySchemeType.ApiKey
-            });
-            opt.AddSecurityRequirement(new OpenApiSecurityRequirement
-            {
+                document.Components ??= new OpenApiComponents();
+                document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+                document.Components.SecuritySchemes[key] = new OpenApiSecurityScheme
                 {
-                    new OpenApiSecurityScheme
-                    {
-                        Reference = new OpenApiReference
-                        {
-                            Type=ReferenceType.SecurityScheme,
-                            Id=key
-                        }
-                    },
-                    new string[]{}
-                }
+                    In = ParameterLocation.Header,
+                    Description = "Please enter " + key,
+                    Name = key,
+                    Type = SecuritySchemeType.ApiKey
+                };
+                document.Security ??= [];
+                document.Security.Add(new OpenApiSecurityRequirement
+                {
+                    [new OpenApiSecuritySchemeReference(key, document)] = []
+                });
+                return Task.CompletedTask;
             });
         });
     }
@@ -201,21 +208,13 @@ public static class Application
 
             string apiURL = Environment.GetEnvironmentVariable("API_URL")!;
 
-            app.UseSwagger(c =>
+            app.MapOpenApi();
+
+            var subdirPath = GetSubdirectoryPath(apiURL);
+            app.MapScalarApiReference("/scalar", options =>
             {
-                c.PreSerializeFilters.Add((swaggerDoc, httpReq) =>
-                {
-                    swaggerDoc.Servers = [
-                        new OpenApiServer {
-                            Url = apiURL
-                        }
-                    ];
-                });
-            });
-            app.UseSwaggerUI();
-            app.MapScalarApiReference(options => {
-                options.OpenApiRoutePattern = GetSubdirectoryPath(apiURL) + "/swagger/{documentName}/swagger.json";
-                options.EndpointPathPrefix = "/scalar/{documentName}";
+                if (!string.IsNullOrEmpty(subdirPath))
+                    options.OpenApiRoutePattern = subdirPath + "/openapi/{documentName}.json";
             });
         }
 

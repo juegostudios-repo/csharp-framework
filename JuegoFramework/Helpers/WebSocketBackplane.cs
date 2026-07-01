@@ -106,7 +106,7 @@ namespace JuegoFramework.Helpers
                 if (value.IsNullOrEmpty) return;
                 try
                 {
-                    var env = JsonSerializer.Deserialize<Envelope>(value!);
+                    var env = JsonSerializer.Deserialize<Envelope>((string)value!);
                     if (env != null) await deliver(env);
                 }
                 catch (Exception ex)
