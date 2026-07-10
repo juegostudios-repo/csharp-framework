@@ -17,7 +17,7 @@ Application.InitLogger();
 var builder = Application.InitBuilder(args);
 builder.Services.AddScoped<ILoginService, LoginService>();
 builder.Services.AddScoped<IWebSocketHandler, WebSocketHandler>();
-Application.AddAuthToSwagger(builder, "access_token");
+Application.AddAuthToSwagger<UserAuth>(builder, "access_token");
 
 var app = Application.InitApp(builder);
 
