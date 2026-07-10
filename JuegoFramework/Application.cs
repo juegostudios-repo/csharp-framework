@@ -144,7 +144,7 @@ public static class Application
         return builder;
     }
 
-    public static void AddAuthToSwagger(WebApplicationBuilder builder, string key)
+    public static void AddAuthToSwagger<TAuthAttribute>(WebApplicationBuilder builder, string key) where TAuthAttribute : Attribute
     {
         builder.Services.AddOpenApi(options =>
         {
@@ -159,11 +159,25 @@ public static class Application
                     Name = key,
                     Type = SecuritySchemeType.ApiKey
                 };
-                document.Security ??= [];
-                document.Security.Add(new OpenApiSecurityRequirement
+
+                return Task.CompletedTask;
+            });
+
+            options.AddOperationTransformer((operation, context, cancellationToken) =>
+            {
+                var hasAuth = context.Description.ActionDescriptor.EndpointMetadata
+                    .OfType<TAuthAttribute>()
+                    .Any();
+
+                if (hasAuth)
                 {
-                    [new OpenApiSecuritySchemeReference(key, document)] = []
-                });
+                    operation.Security ??= [];
+                    operation.Security.Add(new OpenApiSecurityRequirement
+                    {
+                        [new OpenApiSecuritySchemeReference(key, context.Document)] = []
+                    });
+                }
+
                 return Task.CompletedTask;
             });
         });
