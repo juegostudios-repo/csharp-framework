@@ -144,7 +144,7 @@ public static class Application
         return builder;
     }
 
-    public static void AddAuthToSwagger<T>(WebApplicationBuilder builder, string key)
+    public static void AddAuthToSwagger<TAuthAttribute>(WebApplicationBuilder builder, string key) where TAuthAttribute : Attribute
     {
         builder.Services.AddOpenApi(options =>
         {
@@ -166,7 +166,7 @@ public static class Application
             options.AddOperationTransformer((operation, context, cancellationToken) =>
             {
                 var hasAuth = context.Description.ActionDescriptor.EndpointMetadata
-                    .OfType<T>()
+                    .OfType<TAuthAttribute>()
                     .Any();
 
                 if (hasAuth)
