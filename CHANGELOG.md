@@ -1,5 +1,108 @@
 # Changelog
 
+## 1.0.28 (2026-09-15)
+
+### Cron jobs survive a crash and drain cleanly on shutdown
+
+A cron job that threw used to take its own schedule down with it: the exception unwound the timer
+callback and nothing scheduled that job again. `Run` is now caught by the shared runner, logged, and
+the schedule continues on its next tick as if nothing happened. The same net now covers a job whose
+`Interval` or `Expression` getter throws, or whose next occurrence cannot be computed: the failure is
+logged and only that job's loop ends, instead of the exception escaping unobserved.
+
+Shutdown changes too. `CronJobService.Start` now traps `SIGTERM` and `SIGINT`, stops handing out new
+ticks, logs how many jobs are still mid-run, and waits for them to finish before the process exits.
+Before this, a container orchestrator's stop signal could kill the process mid-run, mid-write. A
+container running cron jobs should set `stop_grace_period` (Compose) or
+`terminationGracePeriodSeconds` (Kubernetes) to at least the slowest job's typical run time so the
+drain has time to finish.
+
+### One shared runner, and discovery no longer crashes on an abstract or generic base
+
+`Cron` and `ScheduledCron` used to schedule themselves independently, each with its own timing and
+error handling to keep in sync. Both now delegate to one internal `CronRunner`, so a fix or a new
+capability (the crash safety above, or the timing changes below) lands once for both job kinds
+instead of twice.
+
+Discovery also got safer. It already matched any transitive subclass of `Cron` or `ScheduledCron`
+(`Type.IsSubclassOf`), but it handed every match straight to `Activator.CreateInstance`. An abstract
+intermediate base class between a job and its cron base, or a concrete open generic like
+`FanOutCron<TItem>` itself, matched that check and crashed the entire worker at startup
+("Cannot create an abstract class"). Discovery now walks the base type chain explicitly and skips
+abstract types and open generic types before ever constructing one, so a shared intermediate base
+can sit between a job and its cron base class without taking the worker down. This is what lets
+`FanOutCron<TItem>` (below) exist as a generic base with concrete jobs under it.
+
+### One container per tick, whenever Redis is configured
+
+A cron job means "at this time, do this once". Before, every container ran every job, so a fleet of
+two CRON containers did everything twice. Now, when `REDIS_CONNECTION_STRING` is set, a `Cron`
+aligns its ticks to the clock and every `Cron` and `ScheduledCron` claims each tick's slot in Redis,
+so exactly one container runs it and the rest skip. A run that outlives its tick keeps a running
+lock that skips the next tick elsewhere rather than starting a second copy. There is nothing to opt
+into per job. The one exception is `FanOutCron<TItem>` (below), which ticks on every container on
+purpose and splits its work through per item claims instead. Without Redis a job runs on its own
+timer as before, which is the single container case, so a project with no Redis is unaffected; the
+worker logs a warning at startup in that case, since a second container would then run every job.
+
+### `NextDueIn` and `CronWake`, waking a fan out job between ticks
+
+A job whose real work arrives irregularly used to be stuck picking between a short interval that
+polls mostly for nothing, or a long one that leaves work waiting. `FanOutCron<TItem>.NextDueIn` lets a job
+report how long until it actually has work, computed however it likes (typically against the
+database clock), and the runner sleeps for that instead of the full interval, clamped between 250ms
+and `Interval` so a bad answer cannot spin the loop or blow past the interval either.
+`CronWake.PublishAsync<TJob>()` complements it: any process can publish a wake for a job, and every
+worker running that job cuts its current sleep short and checks again immediately. The typed
+overload only accepts a fan out job, so a wake for a job that cannot be woken is a compile error;
+`PublishAsync(string)` remains for a publisher that cannot reference the job type. A wake is a hint,
+never a guarantee, so the job's own schedule is still what keeps it correct.
+
+### `FanOutCron<TItem>`, spreading one tick across the fleet
+
+Some jobs have per-item work that scales with data, not with the tick interval, e.g. one row per
+active user. `FanOutCron<TItem>` lets a job implement `Enumerate` and `Process` instead of `Run`:
+every container enumerates the same items, each item is claimed once in Redis, and only the winners
+are processed, with `Concurrency` in parallel. Adding containers adds throughput instead of
+duplicating work. The contract is at least once, so `Process` must be safe to repeat; see the README
+for the exact guarantees and the `HoldClaimAfterSuccess` knob. Two things are logged so the contract
+is not silently broken: items whose `ItemKey` repeats another's in one tick (an error, since only one
+of them is processed), and an item whose `Process` outlives `ItemLease` (a warning, since another
+container may have taken it meanwhile).
+
+### Redis backed tests that skip without a Redis to talk to
+
+The slot claim, `NextDueIn`/`CronWake`, and fan-out tests need a real Redis to prove the
+claim, lock, and wake behaviour under contention; a unit test with a fake cannot exercise the actual
+Lua scripts and expiries. They now live behind a custom fact attribute that skips them, rather than
+failing, when `REDIS_CONNECTION_STRING` is not set, so the rest of the suite still runs green on a
+machine with no Redis.
+
+### Behaviour changes
+
+A few existing behaviours changed as a side effect of the above, worth knowing if you have jobs
+already running on 1.0.27 or earlier:
+
+- A `ScheduledCron` whose `Expression` has no next occurrence (Cronos returns null, for instance a
+  date that never comes) used to throw `InvalidOperationException` out of its loop. It now logs an
+  error and the job stays idle. An `Expression` that does not parse still stops the worker at
+  startup, as it always did, but the log line now names the job instead of showing a bare
+  `TargetInvocationException`.
+- The "next run at" log line moved from Information to Debug, since an interval job can tick every
+  few seconds and would otherwise flood Information-level logs.
+- A `Cron` with a non-positive `Interval` used to throw at startup (`System.Timers.Timer` rejects it).
+  It is now logged as an error and the job is skipped, so one broken job's interval no longer takes
+  the whole worker down.
+- `SingleExecutionAsyncTimer` and `ScheduledCron.RunScheduledTask()` are gone; `CronRunner` replaced
+  both and no consumer referenced either.
+- `CronJobService.Start` now exits the process itself once shutdown has drained, rather than relying
+  on the host to kill it after the last run finishes.
+- Two cron jobs with the same class name in different namespaces now stop the worker at startup,
+  since slot claims, item claims and wakes are all keyed on the bare class name.
+- With `REDIS_CONNECTION_STRING` set, a `Cron`'s ticks are now aligned to the clock and every tick
+  costs one Redis `SET`. A single container behaves the same otherwise; several containers now run
+  each job once per tick instead of once per container.
+
 ## 1.0.25 (2026-06-11)
 
 ### Generalized cross-instance fan-out routing (`InstanceFanout<T>`)

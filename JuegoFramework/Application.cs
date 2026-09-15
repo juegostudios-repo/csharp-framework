@@ -12,16 +12,32 @@ public static class Application
 {
     public static void InitLogger()
     {
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
+        var minLevel = Environment.GetEnvironmentVariable("LOG_LEVEL") switch
+        {
+            "Verbose" => Serilog.Events.LogEventLevel.Verbose,
+            "Information" => Serilog.Events.LogEventLevel.Information,
+            "Warning" => Serilog.Events.LogEventLevel.Warning,
+            "Error" => Serilog.Events.LogEventLevel.Error,
+            "Fatal" => Serilog.Events.LogEventLevel.Fatal,
+            _ => Serilog.Events.LogEventLevel.Debug
+        };
+
+        var loggerConfig = new LoggerConfiguration()
+            .MinimumLevel.Is(minLevel)
             .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Information)
             .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
             .MinimumLevel.Override("Microsoft.AspNetCore.HttpLogging.HttpLoggingMiddleware", Serilog.Events.LogEventLevel.Information)
             .Enrich.FromLogContext()
             .Enrich.With<RequestIdEnricher>()
-            .Enrich.With<CronNameEnricher>()
-            .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}]{FormattedCronName} {RequestId}{Message:lj}{NewLine}{Exception}")
-            .CreateLogger();
+            .Enrich.With<CronNameEnricher>();
+
+        // LOG_SINK=none omits the Console sink entirely (benchmark: isolates console-logging cost).
+        if (Environment.GetEnvironmentVariable("LOG_SINK") != "none")
+        {
+            loggerConfig = loggerConfig.WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}]{FormattedCronName} {RequestId}{Message:lj}{NewLine}{Exception}");
+        }
+
+        Log.Logger = loggerConfig.CreateLogger();
     }
 
     public static async Task InitCron()

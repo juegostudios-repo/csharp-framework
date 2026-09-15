@@ -4,10 +4,9 @@ EXPOSE 5000
 
 ENV ASPNETCORE_URLS=http://+:5000
 
-# Creates a non-root user with an explicit UID and adds permission to access the /app folder
-# For more info, please refer to https://aka.ms/vscode-docker-dotnet-configure-containers
-RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /app
-USER appuser
+# Run as the non-root `app` user the .NET images ship (uid $APP_UID). The
+# Ubuntu-based aspnet:10.0 image has no `adduser`, so don't create one.
+USER $APP_UID
 
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG configuration=Release

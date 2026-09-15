@@ -97,6 +97,96 @@ var users = await SQLManager.FindAll<User>(new {
 });
 ```
 
+## Cron jobs
+
+A container started with `MODE=CRON` runs every concrete cron job found in the entry assembly.
+Discovery walks each type's base classes (not just direct subclasses), so a shared intermediate
+base can sit between a job and its cron base class. Abstract classes and open generics are skipped.
+A job is identified everywhere (Redis keys, wakes, logs) by its bare class name, so two jobs with
+the same class name in different namespaces are refused at startup.
+There are three kinds of job:
+
+- **`Cron`**, a fixed interval job. Override `Interval` and `Run`.
+- **`ScheduledCron`**, a Cronos cron expression with seconds. Override `Expression` and `Run`.
+- **`FanOutCron<TItem>`**, a fixed interval job spread across the fleet item by item. Override
+  `Enumerate` and `Process` instead of `Run`.
+
+A long running job can exit early by observing the `protected CancellationToken Stopping` property
+on its base class, either by passing it to the work it awaits or by polling it between items.
+
+### Timing
+
+A `Cron` or `ScheduledCron` runs once per tick across the whole fleet. How that happens depends on
+whether Redis is configured:
+
+- **With `REDIS_CONNECTION_STRING`**, interval ticks align to the clock
+  (`floor(nowUnix / Interval) * Interval + Interval`) and a cron expression's occurrences are already
+  aligned, so every container computes the same slot. The slot is claimed with `SET NX`; the winner
+  runs and the others skip. The winner also holds a running lock for the duration of `Run`,
+  refreshed every 20 seconds, so a slot whose previous run is still in flight anywhere in the fleet
+  is skipped rather than doubled up. Nothing to configure per job.
+- **Without Redis**, the job runs on its own timer, which is the single container case. A `Cron`'s
+  interval is then measured from the end of the previous run, so the first run happens one interval
+  after start and a slow run pushes the next one back rather than overlapping it.
+
+`FanOutCron<TItem>` claims each item returned by `Enumerate` with `SET NX PX ItemLease` in one
+pipelined batch, then processes the ones it won with up to `Concurrency` items in parallel. The
+contract is at least once, not exactly once: an item whose processing outlives `ItemLease` may be
+taken by another container, and since a finished item's claim is released straight away, a container
+enumerating at about the same moment can claim an item another has just finished and released, and
+process it again. `Process` must therefore be safe to repeat. Set `HoldClaimAfterSuccess` to true
+when the lease itself must guarantee one pass per cycle, which is what a job whose `Enumerate`
+cannot tell "done" from "still needs work" wants: the claim is then kept until the lease lapses. A per item failure is logged and keeps that
+item's claim, so a broken item backs off for `ItemLease` instead of retrying in a tight loop. An
+item whose `Process` outlives `ItemLease` logs a warning, since another container may have taken it
+meanwhile. `ItemKey` defaults to the item's `ToString`, which is right for a number, a string or a
+Guid; for a class it is the type name, so override it, or every item shares one claim (duplicate
+keys in a tick are logged as an error). With `Concurrency` above one, `Process` runs on several
+threads at once and must not share mutable state between items. Above
+roughly 100k items per tick, shard the job (for example by a key range) instead of enumerating
+everything in one job.
+
+### Waking a fan out job early
+
+A fan out job ticks on every container (its item claims are what split the work), so it is the one
+kind that can react to a wake. Override `NextDueIn` on a `FanOutCron<TItem>` to return how long
+until the job's next real work, or `null` for "use the interval". It is a delay rather than a timestamp, so a job can compute it against the
+database clock without app/database clock skew mattering. The runner sleeps for
+`clamp(value ?? Interval, 250ms, Interval)`, so `Interval` stays the cap and a "nothing due yet"
+answer can never spin the loop.
+
+Overriding `NextDueIn` also subscribes the job to the wake channel. Call
+`CronWake.PublishAsync<MyJob>()` from anywhere, typically a web instance right after writing
+the row the job cares about, to cut that job's current sleep short instead of waiting out the rest
+of the interval. A wake is a hint, never a guarantee: it can be missed if no worker is listening, so
+the job must still make progress on its own schedule regardless. A wake for a job that is not a
+fan out job is ignored with a Debug log line.
+
+### Redis
+
+A `FanOutCron<TItem>` needs Redis for its item claims: a worker refuses to start when
+`REDIS_CONNECTION_STRING` is empty and a fan out job is present, logging the job's name and exiting
+with code 1. Every other job uses Redis for its slot claim when it is configured and runs on its own
+timer when it is not, so a project without Redis keeps working; the worker logs a warning at startup
+in that case, since a second container would then run every job too. Every key the cron machinery
+writes lives under `{REDIS_PREFIX_KEY}:cron:` (or just `cron:` with no prefix configured).
+
+### Crash safety
+
+A run that throws, and a failed slot claim, are caught and logged, and the schedule
+continues; the next tick happens as usual. A failure computing the next tick itself (a throwing
+`Interval` getter, or a cron expression that can no longer be parsed) is different: it is logged and
+that job's loop ends. Other jobs keep running, and the process needs a restart to bring the broken
+job back.
+
+### Shutdown
+
+On `SIGTERM` or `SIGINT` the worker stops scheduling new runs, logs "waiting for N running jobs" for
+whichever jobs are mid-run, waits for them to finish, and only then exits. Set the container
+`stop_grace_period` (Docker Compose, or `terminationGracePeriodSeconds` on Kubernetes) to at least
+the duration of the slowest job, or the runtime will kill the container mid-run before the drain
+finishes.
+
 ## Releasing
 
 `JuegoFramework` publishes to nuget.org automatically via GitHub Actions
