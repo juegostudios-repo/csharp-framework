@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.0.29 (2026-09-15)
+
+### Dapper type maps are registered once, not per query
+
+`SQLManager` re-registered each entity's Dapper type map on every query. Dapper's `SetTypeMap`
+purges its whole query cache each time it is called, so every query threw away every compiled row
+mapper and Dapper rebuilt one on the next call. The map depends only on the type's attributes, so
+it is now registered once per type. 1.0.28 shipped this behind `SQLMANAGER_CACHE_TYPEMAP=1` as a
+benchmark toggle; the toggle is gone and the once-per-type path is the only one.
+
+### `LOG_LEVEL` is documented, case-insensitive, and loud about typos
+
+1.0.28 added `LOG_LEVEL` without documenting it, matched it case-sensitively, and fell back to
+Debug in silence on anything it did not recognise, so `LOG_LEVEL=warning` left production at Debug
+with nothing in the log to say so. It now accepts any case, and an unrecognised value logs a warning
+naming it as the first line out. `LOG_SINK=none`, which dropped the console sink for a benchmark and
+was never documented, is removed: `LOG_LEVEL=Fatal` gets a benchmark close enough to silent.
+
 ## 1.0.28 (2026-09-15)
 
 ### Cron jobs survive a crash and drain cleanly on shutdown

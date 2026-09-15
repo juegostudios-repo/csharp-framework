@@ -187,6 +187,14 @@ whichever jobs are mid-run, waits for them to finish, and only then exits. Set t
 the duration of the slowest job, or the runtime will kill the container mid-run before the drain
 finishes.
 
+## Logging
+
+`LOG_LEVEL` sets Serilog's minimum level: `Verbose`, `Debug`, `Information`, `Warning`, `Error` or
+`Fatal`, in any case. Unset means `Debug`, the level every release so far has logged at. A value
+that is not one of those also means `Debug`, and a warning naming it is the first line logged, so a
+typo cannot leave production at Debug unnoticed. `Warning` is the usual production choice: it
+silences the per-query and per-request Information lines.
+
 ## Releasing
 
 `JuegoFramework` publishes to nuget.org automatically via GitHub Actions

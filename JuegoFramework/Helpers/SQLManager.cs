@@ -73,16 +73,16 @@ namespace JuegoFramework.Helpers
             }
         }
 
-        // Benchmark toggle: when enabled, register each type's Dapper type-map exactly once
-        // instead of on every query. AddTypeHandler (hit via the JSON path) is not thread-safe
-        // and copies its internal dictionary on every call, so per-query registration is costly.
-        private static readonly bool CacheTypeMap =
-            Environment.GetEnvironmentVariable("SQLMANAGER_CACHE_TYPEMAP") == "1";
+        // Each type's Dapper type map is registered once. Dapper's SetTypeMap purges its whole
+        // query cache on every call, so registering per query, as this used to, threw away every
+        // compiled row mapper on every query. The map is a pure function of the type's attributes,
+        // so once is enough; the JSON handler registration inside it then runs only when Dapper
+        // builds a mapper, not per query.
         private static readonly ConcurrentDictionary<Type, byte> _typeMapRegistered = new();
 
         private static void SetTypeMap<T>()
         {
-            if (CacheTypeMap && _typeMapRegistered.ContainsKey(typeof(T)))
+            if (_typeMapRegistered.ContainsKey(typeof(T)))
             {
                 return;
             }
@@ -116,10 +116,7 @@ namespace JuegoFramework.Helpers
                 })
             );
 
-            if (CacheTypeMap)
-            {
-                _typeMapRegistered.TryAdd(typeof(T), 0);
-            }
+            _typeMapRegistered.TryAdd(typeof(T), 0);
         }
 
         private static async Task<T> LogAndTimeOperation<T>(Func<MySqlConnection, MySqlTransaction?, Task<T>> operation, string operationName, MySqlConnection connection, MySqlTransaction? transaction)
