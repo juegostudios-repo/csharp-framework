@@ -39,6 +39,7 @@ namespace JuegoFramework.Helpers
         private readonly Func<DateTime, DateTime?> _nextTick;
         private readonly CancellationToken _stopping;
         private readonly Cron? _cron;
+        private readonly ScheduledCron? _scheduled;
         private readonly bool _claimsSlot;
         private readonly Func<Task<TimeSpan?>>? _nextDueIn;
         private readonly IFanOutJob? _fanOut;
@@ -69,6 +70,7 @@ namespace JuegoFramework.Helpers
             _stopping = stopping;
             JobName = job.GetType().Name;
             _cron = job as Cron;
+            _scheduled = job as ScheduledCron;
 
             if (job is IFanOutJob fanOut)
             {
@@ -90,6 +92,29 @@ namespace JuegoFramework.Helpers
         /// The name of the job this runner drives, used for logging and as the Redis key segment.
         /// </summary>
         internal string JobName { get; }
+
+        /// <summary>
+        /// Puts the job in the status hash with its kind and schedule, and clears a stopped mark a
+        /// previous process left. A throwing Interval getter is reported by the loop itself.
+        /// </summary>
+        private Task RegisterStatusAsync()
+        {
+            TimeSpan? interval = null;
+
+            try
+            {
+                interval = _cron?.Interval;
+            }
+            catch (Exception)
+            {
+            }
+
+            var kind = _fanOut is not null ? CronStatus.KIND_FAN_OUT
+                : _scheduled is not null ? CronStatus.KIND_SCHEDULED
+                : CronStatus.KIND_INTERVAL;
+
+            return CronStatus.RegisterAsync(JobName, kind, interval, _scheduled?.Expression, _fanOut?.Concurrency);
+        }
 
         /// <summary>
         /// True while the job's Run is in flight.
@@ -143,6 +168,8 @@ namespace JuegoFramework.Helpers
         /// </summary>
         internal async Task RunLoopAsync()
         {
+            await RegisterStatusAsync();
+
             while (!_stopping.IsCancellationRequested)
             {
                 // Guarantees the loop yields once per iteration, so a degenerate schedule can never
@@ -170,12 +197,14 @@ namespace JuegoFramework.Helpers
                     // The job's own Interval or Expression is broken. Stop this loop the same way the
                     // no-next-occurrence case does, rather than faulting the task and dying silently.
                     Log.Error(e, "Cron {Name} failed to compute its next run, its loop is stopping", JobName);
+                    await CronStatus.RecordStoppedAsync(JobName, $"failed to compute its next run: {e.GetType().Name}: {e.Message}");
                     return;
                 }
 
                 if (nextTick is null)
                 {
                     Log.Error("Cron {Name} has no next occurrence, its loop is stopping", JobName);
+                    await CronStatus.RecordStoppedAsync(JobName, "no next occurrence");
                     return;
                 }
 
@@ -200,10 +229,10 @@ namespace JuegoFramework.Helpers
 
                 // Logged after the clamp: a nearer due time pulls the tick in ahead of the
                 // schedule's own next occurrence, so the clamped delay is what actually fires.
-                Log.Debug(
-                    "Cron {Name} next run at {NextRun}",
-                    JobName,
-                    delay > TimeSpan.Zero ? now + delay : now);
+                var nextRun = delay > TimeSpan.Zero ? now + delay : now;
+
+                Log.Debug("Cron {Name} next run at {NextRun}", JobName, nextRun);
+                await CronStatus.RecordNextRunAsync(JobName, nextRun);
 
                 if (delay > TimeSpan.Zero)
                 {
@@ -482,6 +511,11 @@ namespace JuegoFramework.Helpers
             _lastRunStartedUtc = DateTime.UtcNow;
             CronWake.RunningJob.Value = JobName;
 
+            await CronStatus.RecordStartAsync(JobName, _lastRunStartedUtc);
+
+            var outcome = CronStatus.OUTCOME_OK;
+            Exception? error = null;
+
             try
             {
                 await _run(_stopping);
@@ -489,10 +523,13 @@ namespace JuegoFramework.Helpers
             catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
             {
                 // The job observed the shutdown token and stopped where it was told to.
+                outcome = CronStatus.OUTCOME_CANCELLED;
                 Log.Information("Cron {Name} run stopped early, the process is shutting down", JobName);
             }
             catch (Exception e)
             {
+                outcome = CronStatus.OUTCOME_FAILED;
+                error = e;
                 Log.Error(e, "Cron {Name} run failed", JobName);
             }
             finally
@@ -501,7 +538,11 @@ namespace JuegoFramework.Helpers
                 Volatile.Write(ref _running, 0);
             }
 
-            WarnIfOverran(DateTime.UtcNow - _lastRunStartedUtc);
+            var finishedUtc = DateTime.UtcNow;
+
+            await CronStatus.RecordFinishAsync(JobName, _lastRunStartedUtc, finishedUtc, outcome, error, _fanOut?.LastTick);
+
+            WarnIfOverran(finishedUtc - _lastRunStartedUtc);
         }
 
         /// <summary>

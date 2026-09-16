@@ -41,5 +41,23 @@ namespace JuegoFramework.Helpers
         /// The claim on one fan out item: "{prefix}:cron:{JobName}:item:{ItemKey}".
         /// </summary>
         internal static string Item(string jobName, string itemKey) => $"{Root}:{jobName}:item:{itemKey}";
+
+        /// <summary>
+        /// The set of every job name a worker has started: "{prefix}:cron:jobs". Lets a reader list
+        /// the jobs without scanning the keyspace.
+        /// </summary>
+        internal static string Jobs => $"{Root}:jobs";
+
+        /// <summary>
+        /// The hash with a job's shape and its latest run: "{prefix}:cron:{JobName}:status".
+        /// Written and read by <see cref="CronStatus"/>.
+        /// </summary>
+        internal static string Status(string jobName) => $"{Root}:{jobName}:status";
+
+        /// <summary>
+        /// The stream of a job's past runs, newest last: "{prefix}:cron:{JobName}:runs". Capped at
+        /// <see cref="CronStatus.RUN_HISTORY_LENGTH"/> entries.
+        /// </summary>
+        internal static string Runs(string jobName) => $"{Root}:{jobName}:runs";
     }
 }

@@ -101,9 +101,13 @@ namespace JuegoFramework.Helpers
             Process,
             ItemKey);
 
-        private bool _lostEveryClaim;
+        private FanOutTick? _lastTick;
 
-        bool IFanOutJob.LostEveryClaim => _lostEveryClaim;
+        bool IFanOutJob.LostEveryClaim => _lastTick is { Enumerated: > 0, Claimed: 0 };
+
+        FanOutTick? IFanOutJob.LastTick => _lastTick;
+
+        int IFanOutJob.Concurrency => Concurrency;
 
         /// <summary>
         /// Enumerates, claims and processes. Implemented by the base class; override
@@ -114,8 +118,8 @@ namespace JuegoFramework.Helpers
         /// <returns>A Task representing the asynchronous operation.</returns>
         public sealed override async Task Run(CancellationToken stopping)
         {
-            _lostEveryClaim = false;
-            _lostEveryClaim = await FanOutRunner.RunAsync(BuildContext(stopping));
+            _lastTick = null;
+            _lastTick = await FanOutRunner.RunAsync(BuildContext(stopping));
         }
     }
 
@@ -140,6 +144,18 @@ namespace JuegoFramework.Helpers
         /// answer "now" for those very items. A wake still cuts that sleep short.
         /// </summary>
         internal bool LostEveryClaim { get; }
+
+        /// <summary>
+        /// What the last tick did, for the status hash and the run history. Null until the first
+        /// tick, and null again while a tick is in flight, so a tick whose Enumerate threw does not
+        /// report the counts of the one before it.
+        /// </summary>
+        internal FanOutTick? LastTick { get; }
+
+        /// <summary>
+        /// See <see cref="FanOutCron{TItem}.Concurrency"/>, recorded in the status hash.
+        /// </summary>
+        internal int Concurrency { get; }
     }
 
     /// <summary>
@@ -179,8 +195,8 @@ namespace JuegoFramework.Helpers
         /// Runs one fan out tick. An exception from Enumerate propagates to the cron runner, which
         /// logs it; a per item exception is logged and does not stop the other items.
         /// </summary>
-        /// <returns>True when items were enumerated and none of their claims was won.</returns>
-        internal static async Task<bool> RunAsync<TItem>(FanOutJobContext<TItem> job)
+        /// <returns>The tick's counts.</returns>
+        internal static async Task<FanOutTick> RunAsync<TItem>(FanOutJobContext<TItem> job)
         {
             var enumerateStarted = Stopwatch.GetTimestamp();
             var items = await job.Enumerate(job.Stopping);
@@ -207,7 +223,7 @@ namespace JuegoFramework.Helpers
                     0,
                     0,
                     0);
-                return false;
+                return new FanOutTick(0, 0, 0, 0, 0);
             }
 
             var lease = job.ItemLease;
@@ -273,16 +289,18 @@ namespace JuegoFramework.Helpers
                 Log.Information("Cron {Name} fan out stopped early, the process is shutting down", job.JobName);
             }
 
+            var tick = new FanOutTick(items.Count, winners.Count, items.Count - winners.Count, failed, released);
+
             Log.Information(
                 "Cron {Name} fan out: enumerated {Enumerated}, claimed {Claimed}, skipped {Skipped}, failed {Failed}, released {Released}",
                 job.JobName,
-                items.Count,
-                winners.Count,
-                items.Count - winners.Count,
-                failed,
-                released);
+                tick.Enumerated,
+                tick.Claimed,
+                tick.Skipped,
+                tick.Failed,
+                tick.Released);
 
-            return winners.Count == 0;
+            return tick;
         }
 
         /// <summary>

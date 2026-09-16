@@ -199,6 +199,29 @@ timer when it is not, so a project without Redis keeps working; the worker logs 
 in that case, since a second container would then run every job too. Every key the cron machinery
 writes lives under `{REDIS_PREFIX_KEY}:cron:` (or just `cron:` with no prefix configured).
 
+### Status and history
+
+With Redis configured, every job's latest run and its past runs are recorded there, so a web
+instance on the same Redis can serve them, on an admin page for instance. The runner writes the
+job's kind and schedule when its loop starts, the next run time each time it decides one, and each
+run's start, finish, outcome (`ok`, `failed` or `cancelled`), the exception type and message when it
+failed, and the container that ran it. A fan out tick also records its counts (enumerated, claimed,
+skipped, failed, released). A job whose loop ended (a throwing `Interval`, an expression with no
+next occurrence) is marked stopped with the reason; a worker restart clears the mark.
+
+The latest run lives in the hash `{prefix}:cron:{Job}:status`, and the run history in the stream
+`{prefix}:cron:{Job}:runs`, capped at the last 10,000 runs, so it needs no pruning and the load does
+not grow with time. A fan out tick that claimed nothing and failed nothing (up to four a second per
+container while a job is being woken) only refreshes the hash; it is not appended to the history,
+which would otherwise be all empty ticks. Recording is a no-op without Redis, and a Redis failure
+while recording is logged as a warning and does not affect the run.
+
+Read them back with `CronStatus.ListAsync()` (every job, ordered by name), `CronStatus.GetAsync(name)`
+and `CronStatus.RunsAsync(name, count, before)`, which pages newest first: pass the last returned
+run's `Id` as `before` for the next page. `CronJobStatus.Running` is true when the latest start has
+no finish after it; a container that died mid run leaves it true until the next run, so pair it with
+`LastStartedAt` against the interval.
+
 ### Crash safety
 
 A run that throws, and a failed slot claim, are caught and logged, and the schedule

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.1 (2026-09-16)
+
+### Cron status and run history in Redis
+
+There was no way to see what the workers were doing short of reading the CRON container's stdout:
+the slot, running and item keys are locks that vanish seconds after a run. The runner now records
+every job's shape and latest run in `{prefix}:cron:{Job}:status` and its past runs in the stream
+`{prefix}:cron:{Job}:runs`, capped at 10,000 entries, and `CronStatus.ListAsync`, `GetAsync` and
+`RunsAsync` read them back from any process on the same Redis. A fan out tick that claimed and
+failed nothing only refreshes the hash. A job whose loop ends is marked stopped with the reason.
+
 ## 1.1.0 (2026-09-16)
 
 Breaking: every cron job signature changes. `Run()` becomes `Run(CancellationToken)`,
