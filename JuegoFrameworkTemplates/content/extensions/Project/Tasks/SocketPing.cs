@@ -14,7 +14,7 @@ namespace ProjectName.Tasks
             _logger = Log.ForContext("CronName", GetType().Name);
         }
 
-        public override async Task Run()
+        public override async Task Run(CancellationToken stopping)
         {
             try
             {

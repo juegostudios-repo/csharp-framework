@@ -11,6 +11,11 @@ namespace JuegoFramework.Helpers
     /// previous run is still in flight anywhere is skipped rather than doubled up. Without Redis
     /// the job runs on its own timer, which is the single container case.
     /// </para>
+    /// <para>
+    /// A job is constructed once, at worker start, through the application's service provider, so
+    /// it can take its dependencies in its constructor. A scoped dependency must be resolved per run
+    /// from an injected <c>IServiceScopeFactory</c>: the job itself lives for the whole process.
+    /// </para>
     /// </summary>
     public abstract class ScheduledCron
     {
@@ -27,28 +32,19 @@ namespace JuegoFramework.Helpers
         }
 
         /// <summary>
-        /// Cancelled when the process is shutting down. A long running job should pass this
-        /// to the work it awaits, or poll it, so that it can exit early.
-        /// </summary>
-        protected CancellationToken Stopping { get; private set; }
-
-        /// <summary>
-        /// Set by the cron runner before the job is scheduled.
-        /// </summary>
-        internal void SetStopping(CancellationToken stopping) => Stopping = stopping;
-
-        /// <summary>
         /// Runs the scheduled cron job. Implementers are expected to provide an
         /// asynchronous implementation.
         /// </summary>
+        /// <param name="stopping">Cancelled when the process is shutting down. A long running job
+        /// passes it to the work it awaits, or polls it, so that it can exit early.</param>
         /// <returns>A Task representing the asynchronous operation.</returns>
-        public abstract Task Run();
+        public abstract Task Run(CancellationToken stopping);
 
         /// <summary>
         /// Gets the next occurrence of the cron job based on the cron expression.
         /// </summary>
         /// <returns>The next occurrence as a <see cref="DateTime"/>.</returns>
-        public DateTime? GetNextOccurrence()
+        internal DateTime? GetNextOccurrence()
         {
             return GetNextOccurrence(DateTime.UtcNow);
         }

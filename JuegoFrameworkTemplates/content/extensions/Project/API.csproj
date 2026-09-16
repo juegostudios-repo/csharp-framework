@@ -11,7 +11,7 @@
   <ItemGroup>
     <PackageReference Include="Azure.Communication.Email" Version="1.1.0" />
     <PackageReference Include="dotenv.net" Version="3.2.1" />
-    <PackageReference Include="JuegoFramework" Version="1.0.22" />
+    <PackageReference Include="JuegoFramework" Version="1.1.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.17" Condition=" '$(DbTypeMySql)' == 'True' OR '$(DbTypeMongo)' == 'True'"/>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.17" Condition=" '$(DbTypeMySql)' == 'True' OR '$(DbTypeMongo)' == 'True'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

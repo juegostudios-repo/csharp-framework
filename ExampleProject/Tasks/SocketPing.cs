@@ -8,7 +8,7 @@ namespace API.Tasks
     {
         public override TimeSpan Interval => TimeSpan.FromSeconds(Constants.CRON_TIMER.SOCKET_PING_TIME);
 
-        public override async Task<Task> Run()
+        public override async Task Run(CancellationToken stopping)
         {
             try
             {
@@ -32,7 +32,6 @@ namespace API.Tasks
             {
                 Log.Error(e, "SocketPing Error");
             }
-            return Task.CompletedTask;
         }
     }
 }

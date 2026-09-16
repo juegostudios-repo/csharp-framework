@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace JuegoFramework.Helpers
 {
@@ -14,9 +15,16 @@ namespace JuegoFramework.Helpers
         /// </summary>
         internal static IReadOnlyList<Task> Loops => _loops;
 
-        public static async Task Start()
+        /// <summary>
+        /// Discovers, constructs and runs every cron job in the entry assembly until the process is
+        /// told to stop, then exits the process.
+        /// </summary>
+        /// <param name="services">The application's service provider, from which each job is
+        /// constructed so that it can take constructor dependencies. Null constructs jobs with their
+        /// parameterless constructor.</param>
+        public static async Task Start(IServiceProvider? services = null)
         {
-            var cronJobs = DiscoverJobs(Assembly.GetEntryAssembly()!);
+            var cronJobs = DiscoverJobs(Assembly.GetEntryAssembly()!, services);
 
             if (cronJobs.Count == 0)
             {
@@ -86,29 +94,42 @@ namespace JuegoFramework.Helpers
         /// Finds every concrete cron job in the given assembly. The entry assembly in a test host is
         /// the test runner, so the assembly is a parameter rather than looked up here.
         /// </summary>
-        internal static List<object> DiscoverJobs(Assembly assembly)
+        internal static List<object> DiscoverJobs(Assembly assembly, IServiceProvider? services = null)
         {
             return [.. assembly.GetTypes()
                 .Where(type => !type.IsAbstract && !type.IsGenericTypeDefinition && IsCronJob(type))
-                .Select(Construct)
+                .Select(type => Construct(type, services))
                 .OfType<object>()];
         }
 
         /// <summary>
-        /// Constructs one job, naming it when its constructor throws. A ScheduledCron parses its
-        /// Expression there, so a bad expression would otherwise surface as a bare
-        /// TargetInvocationException with no job name in it.
+        /// Constructs one job, naming it when construction fails. With a service provider the job's
+        /// constructor dependencies are resolved from it; a dependency it cannot supply, or a
+        /// scoped one asked for from the root provider, is the "could not be constructed" case.
+        /// Without one the parameterless constructor is used. Either way the job's own constructor
+        /// can throw: a ScheduledCron parses its Expression there, so a bad expression would
+        /// otherwise surface as a bare TargetInvocationException with no job name in it.
         /// </summary>
-        private static object? Construct(Type type)
+        private static object? Construct(Type type, IServiceProvider? services)
         {
             try
             {
-                return Activator.CreateInstance(type);
+                return services is null
+                    ? Activator.CreateInstance(type)
+                    : ActivatorUtilities.CreateInstance(services, type);
             }
             catch (TargetInvocationException e) when (e.InnerException is not null)
             {
+                // Activator wraps a throwing constructor; the inner exception has the real stack.
                 Log.Error(e.InnerException, "Cron {Name} could not be constructed", type.Name);
                 throw new InvalidOperationException($"Cron {type.Name} could not be constructed", e.InnerException);
+            }
+            catch (Exception e)
+            {
+                // ActivatorUtilities rethrows a constructor's own exception unwrapped, and throws
+                // InvalidOperationException itself for a dependency the provider cannot supply.
+                Log.Error(e, "Cron {Name} could not be constructed", type.Name);
+                throw new InvalidOperationException($"Cron {type.Name} could not be constructed", e);
             }
         }
 
@@ -179,7 +200,6 @@ namespace JuegoFramework.Helpers
 
                 if (cronJob is ScheduledCron scheduledCronJob)
                 {
-                    scheduledCronJob.SetStopping(stoppingSource.Token);
                     runner = new CronRunner(scheduledCronJob, scheduledCronJob.GetNextOccurrence, stoppingSource.Token, redisConfigured);
                 }
                 else if (cronJob is Cron regularCronJob)
@@ -191,8 +211,6 @@ namespace JuegoFramework.Helpers
                         Log.Error("Cron {Name} has a non-positive interval of {Interval}, it will not be scheduled", regularCronJob.GetType().Name, regularCronJob.Interval);
                         continue;
                     }
-
-                    regularCronJob.SetStopping(stoppingSource.Token);
 
                     // Without Redis the interval is measured from the end of the previous run, so the
                     // first run happens one interval after start. With Redis the runner aligns the

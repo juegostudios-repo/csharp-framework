@@ -201,6 +201,74 @@ namespace JuegoFrameworkTests
         }
 
         [RedisFact]
+        public async Task A_Tick_That_Won_Nothing_Sleeps_Its_Interval_Until_Woken()
+        {
+            LostClaimCron.Reset();
+
+            // Another container holds the only item, so every tick here loses its claim.
+            await _redis.Database.StringSetAsync(CronRedisKeys.Item(nameof(LostClaimCron), "1"), "elsewhere", TimeSpan.FromSeconds(60));
+
+            var job = new LostClaimCron();
+            using var stopping = new CancellationTokenSource();
+            var loop = Task.Run(RunnerFor(job, stopping.Token).RunLoopAsync);
+
+            try
+            {
+                // NextDueIn answers "now", so without the rule this would enumerate at the 250 ms
+                // floor: four or five times in this window. With it, the first tick loses and the
+                // loop sleeps its 30 s interval.
+                await Task.Delay(1200);
+                Assert.Equal(1, LostClaimCron.EnumerateCount);
+
+                // A wake still cuts that sleep short.
+                var stopwatch = Stopwatch.StartNew();
+                await CronWake.PublishAsync<LostClaimCron>();
+                await WaitUntil(() => LostClaimCron.EnumerateCount >= 2);
+                stopwatch.Stop();
+
+                Assert.True(stopwatch.ElapsedMilliseconds < 500, $"the wake took {stopwatch.ElapsedMilliseconds} ms to land");
+            }
+            finally
+            {
+                await stopping.CancelAsync();
+                await loop;
+            }
+        }
+
+        [RedisFact]
+        public async Task A_Job_Waking_Itself_From_Its_Own_Run_Is_Not_Rerun_But_Another_Job_Is()
+        {
+            SelfWakeCron.Reset();
+            SelfWakeTargetCron.Reset();
+
+            var job = new SelfWakeCron();
+            var target = new SelfWakeTargetCron();
+            using var stopping = new CancellationTokenSource();
+            var loop = Task.Run(RunnerFor(job, stopping.Token).RunLoopAsync);
+            var targetLoop = Task.Run(RunnerFor(target, stopping.Token).RunLoopAsync);
+
+            try
+            {
+                await Task.Delay(300);
+                Assert.Equal(0, SelfWakeCron.RunCount);
+
+                await CronWake.PublishAsync<SelfWakeCron>();
+                await WaitUntil(() => SelfWakeCron.RunCount >= 1);
+
+                // Process published a wake for its own job and one for the target. The target's
+                // sleep is cut short; the job's own wake is dropped, so it does not rerun.
+                await WaitUntil(() => SelfWakeTargetCron.RunCount >= 1);
+                await Task.Delay(1000);
+                Assert.Equal(1, SelfWakeCron.RunCount);
+            }
+            finally
+            {
+                await stopping.CancelAsync();
+                await Task.WhenAll(loop, targetLoop);
+            }
+        }
+
+        [RedisFact]
         public async Task A_NextDueIn_Of_Zero_Does_Not_Spin()
         {
             AlwaysDueCron.Reset();
@@ -248,22 +316,6 @@ namespace JuegoFrameworkTests
         // Task A6. Fan out.
 
         [RedisFact]
-        public async Task Two_Runners_Over_One_List_Process_Every_Item_Once()
-        {
-            FanOutSharedCron.Reset();
-
-            var first = new FanOutSharedCron();
-            var second = new FanOutSharedCron();
-
-            await Task.WhenAll(first.Run(), second.Run());
-
-            var processed = FanOutSharedCron.Processed.ToList();
-
-            Assert.Equal(FanOutSharedCron.ITEM_COUNT, processed.Count);
-            Assert.Equal(FanOutSharedCron.ITEM_COUNT, processed.Distinct().Count());
-        }
-
-        [RedisFact]
         public async Task Two_Runners_On_The_Default_Release_Path_Process_Every_Item_At_Least_Once()
         {
             DefaultReleaseFanOutCron.Reset();
@@ -271,7 +323,7 @@ namespace JuegoFrameworkTests
             var first = new DefaultReleaseFanOutCron();
             var second = new DefaultReleaseFanOutCron();
 
-            await Task.WhenAll(first.Run(), second.Run());
+            await Task.WhenAll(first.Run(CancellationToken.None), second.Run(CancellationToken.None));
 
             var processed = DefaultReleaseFanOutCron.Processed.ToList();
 
@@ -288,11 +340,11 @@ namespace JuegoFrameworkTests
 
             var job = new DefaultReleaseFanOutCron();
 
-            await job.Run();
+            await job.Run(CancellationToken.None);
             Assert.Equal(DefaultReleaseFanOutCron.ITEM_COUNT, DefaultReleaseFanOutCron.Processed.Count);
 
             // The claims were released, so the very next tick takes the same items again.
-            await job.Run();
+            await job.Run(CancellationToken.None);
             Assert.Equal(DefaultReleaseFanOutCron.ITEM_COUNT * 2, DefaultReleaseFanOutCron.Processed.Count);
         }
 
@@ -300,7 +352,7 @@ namespace JuegoFrameworkTests
         public async Task A_Failed_Claim_Costs_The_Tick_Its_Items_Rather_Than_Aborting()
         {
             var job = new ClaimProbeFanOutCron();
-            var context = job.BuildContext();
+            var context = job.BuildContext(CancellationToken.None);
 
             // A negative lease is what Redis rejects, so every claim in the batch faults. The helper
             // has to hand back one entry per item, none of them won, and must not throw.
@@ -328,7 +380,7 @@ namespace JuegoFrameworkTests
         public async Task Each_Claim_Carries_Its_Own_Value_So_A_Release_Cannot_Delete_A_Later_One()
         {
             var job = new ClaimProbeFanOutCron();
-            var context = job.BuildContext();
+            var context = job.BuildContext(CancellationToken.None);
             var lease = TimeSpan.FromMilliseconds(600);
 
             var first = Assert.Single(await FanOutRunner.ClaimAsync(context, [9], lease));
@@ -350,22 +402,22 @@ namespace JuegoFrameworkTests
         }
 
         [RedisFact]
-        public async Task An_Item_Whose_Lease_Expired_Is_Taken_Again()
+        public async Task A_Failed_Item_Keeps_Its_Claim_For_The_Lease_And_Is_Taken_Again_After()
         {
             LeasedFanOutCron.Reset();
 
             var job = new LeasedFanOutCron();
 
-            await job.Run();
+            await job.Run(CancellationToken.None);
             Assert.Equal(1, LeasedFanOutCron.RunCount);
 
-            // The lease still holds, so the item is skipped.
-            await job.Run();
+            // The failed item's claim still holds, so the item is skipped: this is the back-off.
+            await job.Run(CancellationToken.None);
             Assert.Equal(1, LeasedFanOutCron.RunCount);
 
             await Task.Delay(LeasedFanOutCron.LEASE + TimeSpan.FromMilliseconds(400));
 
-            await job.Run();
+            await job.Run(CancellationToken.None);
             Assert.Equal(2, LeasedFanOutCron.RunCount);
         }
 
@@ -375,7 +427,7 @@ namespace JuegoFrameworkTests
             OpaqueItemFanOutCron.Reset();
 
             // Three distinct items whose default ItemKey is the type name, so they share one claim.
-            await new OpaqueItemFanOutCron().Run();
+            await new OpaqueItemFanOutCron().Run(CancellationToken.None);
 
             Assert.Equal(1, OpaqueItemFanOutCron.Processed.Count);
         }
@@ -387,9 +439,29 @@ namespace JuegoFrameworkTests
 
             var job = new ThrowingFanOutCron();
 
-            await job.Run();
+            await job.Run(CancellationToken.None);
 
             Assert.Equal([1, 2, 4, 5], ThrowingFanOutCron.Processed.OrderBy(item => item).ToList());
+        }
+
+        [RedisFact]
+        public async Task An_Item_Stopped_By_Shutdown_Has_Its_Claim_Released()
+        {
+            CancelledItemFanOutCron.Reset();
+
+            var job = new CancelledItemFanOutCron();
+            using var stopping = new CancellationTokenSource();
+            var run = job.Run(stopping.Token);
+
+            await WaitUntil(() => CancelledItemFanOutCron.Started);
+            Assert.True(await _redis.Database.KeyExistsAsync(CronRedisKeys.Item(nameof(CancelledItemFanOutCron), "1")));
+
+            await stopping.CancelAsync();
+            await run;
+
+            // Stopping mid-item is not a failure: the claim is released so the next tick anywhere
+            // takes the item straight away instead of waiting out the lease.
+            Assert.False(await _redis.Database.KeyExistsAsync(CronRedisKeys.Item(nameof(CancelledItemFanOutCron), "1")));
         }
 
         [RedisFact]
@@ -397,7 +469,7 @@ namespace JuegoFrameworkTests
         {
             var job = new ReleaseFanOutCron();
 
-            await job.Run();
+            await job.Run(CancellationToken.None);
 
             Assert.False(await _redis.Database.KeyExistsAsync(CronRedisKeys.Item(nameof(ReleaseFanOutCron), "ok")));
             Assert.True(await _redis.Database.KeyExistsAsync(CronRedisKeys.Item(nameof(ReleaseFanOutCron), "bad")));
@@ -405,8 +477,6 @@ namespace JuegoFrameworkTests
 
         private static CronRunner RunnerFor(Cron job, CancellationToken stopping = default)
         {
-            job.SetStopping(stopping);
-
             return new CronRunner(job, now => now + job.Interval, stopping, redisConfigured: true);
         }
 
@@ -437,7 +507,7 @@ namespace JuegoFrameworkTests
 
             public override TimeSpan Interval => INTERVAL;
 
-            public override Task Run()
+            public override Task Run(CancellationToken stopping)
             {
                 Interlocked.Increment(ref _runCount);
                 return Task.CompletedTask;
@@ -466,7 +536,7 @@ namespace JuegoFrameworkTests
 
             public override TimeSpan Interval => INTERVAL;
 
-            public override async Task Run()
+            public override async Task Run(CancellationToken stopping)
             {
                 Interlocked.Increment(ref _runCount);
 
@@ -489,7 +559,7 @@ namespace JuegoFrameworkTests
             // Short, so the loop reaches its second slot inside the test.
             public override TimeSpan Interval => TimeSpan.FromSeconds(1);
 
-            public override Task Run()
+            public override Task Run(CancellationToken stopping)
             {
                 Interlocked.Increment(ref _runCount);
                 return Task.CompletedTask;
@@ -508,9 +578,9 @@ namespace JuegoFrameworkTests
 
             public override Task<TimeSpan?> NextDueIn() => Task.FromResult<TimeSpan?>(TimeSpan.FromSeconds(30));
 
-            public override Task<List<int>> Enumerate() => Task.FromResult(new List<int> { 1 });
+            public override Task<List<int>> Enumerate(CancellationToken stopping) => Task.FromResult(new List<int> { 1 });
 
-            public override Task Process(int item)
+            public override Task Process(int item, CancellationToken stopping)
             {
                 Interlocked.Increment(ref _runCount);
                 return Task.CompletedTask;
@@ -539,9 +609,9 @@ namespace JuegoFrameworkTests
 
             public override Task<TimeSpan?> NextDueIn() => Task.FromResult<TimeSpan?>(TimeSpan.FromSeconds(30));
 
-            public override Task<List<int>> Enumerate() => Task.FromResult(new List<int> { 1 });
+            public override Task<List<int>> Enumerate(CancellationToken stopping) => Task.FromResult(new List<int> { 1 });
 
-            public override async Task Process(int item)
+            public override async Task Process(int item, CancellationToken stopping)
             {
                 if (Interlocked.Exchange(ref _started, 1) == 0)
                 {
@@ -549,6 +619,70 @@ namespace JuegoFrameworkTests
                 }
 
                 Interlocked.Increment(ref _runCount);
+            }
+        }
+
+        public sealed class LostClaimCron : FanOutCron<int>
+        {
+            private static int _enumerateCount;
+
+            public static int EnumerateCount => Volatile.Read(ref _enumerateCount);
+
+            public static void Reset() => Volatile.Write(ref _enumerateCount, 0);
+
+            public override TimeSpan Interval => TimeSpan.FromSeconds(30);
+
+            public override Task<TimeSpan?> NextDueIn() => Task.FromResult<TimeSpan?>(TimeSpan.Zero);
+
+            public override Task<List<int>> Enumerate(CancellationToken stopping)
+            {
+                Interlocked.Increment(ref _enumerateCount);
+                return Task.FromResult(new List<int> { 1 });
+            }
+
+            public override Task Process(int item, CancellationToken stopping) => throw new InvalidOperationException("the claim is never won, so this never runs");
+        }
+
+        public sealed class SelfWakeCron : FanOutCron<int>
+        {
+            private static int _runCount;
+
+            public static int RunCount => Volatile.Read(ref _runCount);
+
+            public static void Reset() => Volatile.Write(ref _runCount, 0);
+
+            public override TimeSpan Interval => TimeSpan.FromSeconds(30);
+
+            public override Task<TimeSpan?> NextDueIn() => Task.FromResult<TimeSpan?>(TimeSpan.FromSeconds(30));
+
+            public override Task<List<int>> Enumerate(CancellationToken stopping) => Task.FromResult(new List<int> { 1 });
+
+            public override async Task Process(int item, CancellationToken stopping)
+            {
+                Interlocked.Increment(ref _runCount);
+                await CronWake.PublishAsync<SelfWakeCron>();
+                await CronWake.PublishAsync<SelfWakeTargetCron>();
+            }
+        }
+
+        public sealed class SelfWakeTargetCron : FanOutCron<int>
+        {
+            private static int _runCount;
+
+            public static int RunCount => Volatile.Read(ref _runCount);
+
+            public static void Reset() => Volatile.Write(ref _runCount, 0);
+
+            public override TimeSpan Interval => TimeSpan.FromSeconds(30);
+
+            public override Task<TimeSpan?> NextDueIn() => Task.FromResult<TimeSpan?>(TimeSpan.FromSeconds(30));
+
+            public override Task<List<int>> Enumerate(CancellationToken stopping) => Task.FromResult(new List<int> { 1 });
+
+            public override Task Process(int item, CancellationToken stopping)
+            {
+                Interlocked.Increment(ref _runCount);
+                return Task.CompletedTask;
             }
         }
 
@@ -564,9 +698,9 @@ namespace JuegoFrameworkTests
 
             public override Task<TimeSpan?> NextDueIn() => Task.FromResult<TimeSpan?>(TimeSpan.Zero);
 
-            public override Task<List<int>> Enumerate() => Task.FromResult(new List<int> { 1 });
+            public override Task<List<int>> Enumerate(CancellationToken stopping) => Task.FromResult(new List<int> { 1 });
 
-            public override Task Process(int item)
+            public override Task Process(int item, CancellationToken stopping)
             {
                 Interlocked.Increment(ref _runCount);
                 return Task.CompletedTask;
@@ -586,9 +720,9 @@ namespace JuegoFrameworkTests
 
             public override Task<TimeSpan?> NextDueIn() => throw new InvalidOperationException("the hook is broken on purpose");
 
-            public override Task<List<int>> Enumerate() => Task.FromResult(new List<int> { 1 });
+            public override Task<List<int>> Enumerate(CancellationToken stopping) => Task.FromResult(new List<int> { 1 });
 
-            public override Task Process(int item)
+            public override Task Process(int item, CancellationToken stopping)
             {
                 Interlocked.Increment(ref _runCount);
                 return Task.CompletedTask;
@@ -596,34 +730,8 @@ namespace JuegoFrameworkTests
         }
 
         /// <summary>
-        /// Two instances of this share one item list. The claim is deliberately not released on
-        /// success, so the run of the other instance cannot retake an item this one has finished.
-        /// </summary>
-        public sealed class FanOutSharedCron : FanOutCron<int>
-        {
-            internal const int ITEM_COUNT = 100;
-
-            public static ConcurrentQueue<int> Processed { get; } = new();
-
-            public static void Reset() => Processed.Clear();
-
-            public override TimeSpan Interval => TimeSpan.FromSeconds(30);
-
-            public override int Concurrency => 8;
-
-            public override bool HoldClaimAfterSuccess => true;
-
-            public override Task<List<int>> Enumerate() => Task.FromResult(Enumerable.Range(1, ITEM_COUNT).ToList());
-
-            public override Task Process(int item)
-            {
-                Processed.Enqueue(item);
-                return Task.CompletedTask;
-            }
-        }
-
-        /// <summary>
-        /// The default release path, so the tests over it see the real at least once behaviour.
+        /// Two instances of this share one item list, so the tests over it see the real at least
+        /// once behaviour of the release path.
         /// </summary>
         public sealed class DefaultReleaseFanOutCron : FanOutCron<int>
         {
@@ -637,9 +745,9 @@ namespace JuegoFrameworkTests
 
             public override int Concurrency => 4;
 
-            public override Task<List<int>> Enumerate() => Task.FromResult(Enumerable.Range(1, ITEM_COUNT).ToList());
+            public override Task<List<int>> Enumerate(CancellationToken stopping) => Task.FromResult(Enumerable.Range(1, ITEM_COUNT).ToList());
 
-            public override Task Process(int item)
+            public override Task Process(int item, CancellationToken stopping)
             {
                 Processed.Enqueue(item);
                 return Task.CompletedTask;
@@ -653,9 +761,9 @@ namespace JuegoFrameworkTests
         {
             public override TimeSpan Interval => TimeSpan.FromSeconds(30);
 
-            public override Task<List<int>> Enumerate() => Task.FromResult(new List<int>());
+            public override Task<List<int>> Enumerate(CancellationToken stopping) => Task.FromResult(new List<int>());
 
-            public override Task Process(int item) => Task.CompletedTask;
+            public override Task Process(int item, CancellationToken stopping) => Task.CompletedTask;
         }
 
         public sealed class LeasedFanOutCron : FanOutCron<int>
@@ -672,14 +780,12 @@ namespace JuegoFrameworkTests
 
             public override TimeSpan ItemLease => LEASE;
 
-            public override bool HoldClaimAfterSuccess => true;
+            public override Task<List<int>> Enumerate(CancellationToken stopping) => Task.FromResult(new List<int> { 7 });
 
-            public override Task<List<int>> Enumerate() => Task.FromResult(new List<int> { 7 });
-
-            public override Task Process(int item)
+            public override Task Process(int item, CancellationToken stopping)
             {
                 Interlocked.Increment(ref _runCount);
-                return Task.CompletedTask;
+                throw new InvalidOperationException("fails on purpose, so the claim is kept for the lease");
             }
         }
 
@@ -696,12 +802,12 @@ namespace JuegoFrameworkTests
 
             public override TimeSpan Interval => TimeSpan.FromSeconds(30);
 
-            public override Task<List<OpaqueItem>> Enumerate() => Task.FromResult(new List<OpaqueItem>
+            public override Task<List<OpaqueItem>> Enumerate(CancellationToken stopping) => Task.FromResult(new List<OpaqueItem>
             {
                 new() { Id = 1 }, new() { Id = 2 }, new() { Id = 3 },
             });
 
-            public override Task Process(OpaqueItem item)
+            public override Task Process(OpaqueItem item, CancellationToken stopping)
             {
                 Processed.Enqueue(item.Id);
                 return Task.CompletedTask;
@@ -716,9 +822,9 @@ namespace JuegoFrameworkTests
 
             public override TimeSpan Interval => TimeSpan.FromSeconds(30);
 
-            public override Task<List<int>> Enumerate() => Task.FromResult(new List<int> { 1, 2, 3, 4, 5 });
+            public override Task<List<int>> Enumerate(CancellationToken stopping) => Task.FromResult(new List<int> { 1, 2, 3, 4, 5 });
 
-            public override Task Process(int item)
+            public override Task Process(int item, CancellationToken stopping)
             {
                 if (item == 3)
                 {
@@ -730,13 +836,32 @@ namespace JuegoFrameworkTests
             }
         }
 
+        public sealed class CancelledItemFanOutCron : FanOutCron<int>
+        {
+            private static int _started;
+
+            public static bool Started => Volatile.Read(ref _started) == 1;
+
+            public static void Reset() => Volatile.Write(ref _started, 0);
+
+            public override TimeSpan Interval => TimeSpan.FromMinutes(5);
+
+            public override Task<List<int>> Enumerate(CancellationToken stopping) => Task.FromResult(new List<int> { 1 });
+
+            public override async Task Process(int item, CancellationToken stopping)
+            {
+                Volatile.Write(ref _started, 1);
+                await Task.Delay(Timeout.Infinite, stopping);
+            }
+        }
+
         public sealed class ReleaseFanOutCron : FanOutCron<string>
         {
             public override TimeSpan Interval => TimeSpan.FromMinutes(5);
 
-            public override Task<List<string>> Enumerate() => Task.FromResult(new List<string> { "ok", "bad" });
+            public override Task<List<string>> Enumerate(CancellationToken stopping) => Task.FromResult(new List<string> { "ok", "bad" });
 
-            public override Task Process(string item)
+            public override Task Process(string item, CancellationToken stopping)
             {
                 if (item == "bad")
                 {

@@ -1,5 +1,66 @@
 # Changelog
 
+## 1.1.0 (2026-09-16)
+
+Breaking: every cron job signature changes. `Run()` becomes `Run(CancellationToken)`,
+`Enumerate()` becomes `Enumerate(CancellationToken)` and `Process(item)` becomes
+`Process(item, CancellationToken)`; the `Stopping` property and `HoldClaimAfterSuccess` are gone;
+`CronWake.PublishAsync(string)` and `ScheduledCron.GetNextOccurrence()` are internal.
+
+### Jobs are constructed through the service provider
+
+Jobs were built with `Activator.CreateInstance`, so a job that needed a service had to build its
+own object graph by hand. `CronJobService.Start` now takes the application's `IServiceProvider`
+(`Application.InitCron` passes `Global.ServiceProvider`) and constructs each job with
+`ActivatorUtilities`, so a job takes its dependencies in its constructor. A dependency the provider
+cannot supply fails startup naming the job. Jobs live for the whole process, so a scoped dependency
+goes through an injected `IServiceScopeFactory`, one scope per run or per item. Without a provider
+the parameterless constructor is used, as before.
+
+### The shutdown token is a parameter
+
+`Run`, `Enumerate` and `Process` receive the shutdown `CancellationToken` instead of reading a
+`Stopping` property off the base class, so the fact that a job can observe shutdown is in its
+signature. A fan out item that throws `OperationCanceledException` once the token is cancelled has
+its claim released instead of kept as a failure back-off, so a worker that is draining does not
+leave its in-flight items locked for the rest of their lease.
+
+### `HoldClaimAfterSuccess` is removed
+
+It kept a finished item's claim for the whole lease so the lease could stand in for a missing
+"done this cycle" marker. Nothing uses it, and it was a trap: a tick measured from container start
+meant a restart re-ran the cycle, and had ticks ever been clock aligned the held claim would have
+expired just after the next tick and skipped every other cycle. A job that cannot tell "done" from
+"still due" records the last pass on the item, a timestamp column, and enumerates on that.
+
+### A fan out tick is not warned about outlasting its interval
+
+The "run took longer than its interval, so it is falling behind" warning applied to fan out jobs
+too, where `Interval` caps the sleep between ticks and defaults the item lease but says nothing
+about how long a tick over many items should take. The warning is now single runner only; the per
+item lease warning already covers a slow fan out item.
+
+### A fan out tick that wins nothing sleeps its interval
+
+A `FanOutCron` whose `NextDueIn` answered "now" re-enumerated at the 250 ms floor for as long as
+anything stayed due, even when every due item was held by another container or backing off after a
+failure. One wedged item meant four `Enumerate` queries a second on every container for the whole
+back-off. A tick that enumerated items and won none of their claims now skips `NextDueIn` and
+sleeps its full `Interval`; a wake still cuts that short, so new work lands as fast as before.
+
+### A job's own wake is dropped
+
+A `Process` that wrote a due row and published a wake for the job it was running inside of woke
+every container in the fleet, including itself, for work its own loop would pick up anyway by
+re-reading `NextDueIn` when the run ended. `CronWake.PublishAsync` now drops a wake for the job on
+the current run's async context before it reaches Redis. A wake for a different job still goes out.
+
+### Slow or oversized enumerations are named in the log
+
+`Enumerate` and `NextDueIn` run on every container on every tick and on every wake, so an unindexed
+query there is the first thing to show up on the database. Either taking longer than a second, or an
+`Enumerate` returning more than 10k items, now logs a warning with the job's name.
+
 ## 1.0.29 (2026-09-15)
 
 ### Dapper type maps are registered once, not per query

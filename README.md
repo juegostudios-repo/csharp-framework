@@ -106,13 +106,26 @@ A job is identified everywhere (Redis keys, wakes, logs) by its bare class name,
 the same class name in different namespaces are refused at startup.
 There are three kinds of job:
 
-- **`Cron`**, a fixed interval job. Override `Interval` and `Run`.
-- **`ScheduledCron`**, a Cronos cron expression with seconds. Override `Expression` and `Run`.
+- **`Cron`**, a fixed interval job. Override `Interval` and `Run(CancellationToken)`.
+- **`ScheduledCron`**, a Cronos cron expression with seconds. Override `Expression` and
+  `Run(CancellationToken)`.
 - **`FanOutCron<TItem>`**, a fixed interval job spread across the fleet item by item. Override
-  `Enumerate` and `Process` instead of `Run`.
+  `Enumerate(CancellationToken)` and `Process(TItem, CancellationToken)` instead of `Run`.
 
-A long running job can exit early by observing the `protected CancellationToken Stopping` property
-on its base class, either by passing it to the work it awaits or by polling it between items.
+The token is cancelled when the process is shutting down. A long run or item passes it to the work
+it awaits, or polls it between steps, so the worker can drain; a short one ignores it. A fan out
+item that throws `OperationCanceledException` once the token is cancelled has its claim released
+rather than kept, so the next tick anywhere takes it straight away.
+
+### Construction
+
+Jobs are constructed once, at worker start, through the application's service provider
+(`ActivatorUtilities`), so a job takes its dependencies in its constructor like any other service.
+The job lives for the whole process, so a scoped dependency is not injected directly (the root
+provider refuses it in Development): inject `IServiceScopeFactory` and open a scope per run or per
+item. A job whose dependencies the provider cannot supply is named in the startup error. Without a
+provider (a project that does not call `Application.InitApp`, or a test), the parameterless
+constructor is used.
 
 ### Timing
 
@@ -134,17 +147,21 @@ pipelined batch, then processes the ones it won with up to `Concurrency` items i
 contract is at least once, not exactly once: an item whose processing outlives `ItemLease` may be
 taken by another container, and since a finished item's claim is released straight away, a container
 enumerating at about the same moment can claim an item another has just finished and released, and
-process it again. `Process` must therefore be safe to repeat. Set `HoldClaimAfterSuccess` to true
-when the lease itself must guarantee one pass per cycle, which is what a job whose `Enumerate`
-cannot tell "done" from "still needs work" wants: the claim is then kept until the lease lapses. A per item failure is logged and keeps that
-item's claim, so a broken item backs off for `ItemLease` instead of retrying in a tight loop. An
-item whose `Process` outlives `ItemLease` logs a warning, since another container may have taken it
-meanwhile. `ItemKey` defaults to the item's `ToString`, which is right for a number, a string or a
-Guid; for a class it is the type name, so override it, or every item shares one claim (duplicate
-keys in a tick are logged as an error). With `Concurrency` above one, `Process` runs on several
-threads at once and must not share mutable state between items. Above
-roughly 100k items per tick, shard the job (for example by a key range) instead of enumerating
-everything in one job.
+process it again. `Process` must therefore be safe to repeat. A job whose `Enumerate` cannot tell
+"done" from "still needs work" on its own records the last pass on the item, a timestamp column for
+instance, and enumerates on that. A per item failure is logged and keeps that item's claim, so a
+broken item backs off for `ItemLease` instead of retrying in a tight loop. An item whose `Process`
+outlives `ItemLease` logs a warning, since another container may have taken it meanwhile.
+`ItemKey` defaults to the item's `ToString`, which is right for a number, a string or a Guid; for a
+class it is the type name, so override it, or every item shares one claim (duplicate keys in a tick
+are logged as an error). With `Concurrency` above one, `Process` runs on several threads at once
+and must not share mutable state between items. Above roughly 100k items per tick, shard the job
+(for example by a key range) instead of enumerating everything in one job.
+
+For a fan out job, `Interval` is the cap on the sleep between ticks and the default `ItemLease`,
+not a bound on a tick's duration: a tick over many items may outlast it, so the "run took longer
+than its interval" warning single runner jobs get does not apply. The lease warning covers a slow
+item.
 
 ### Waking a fan out job early
 
@@ -160,7 +177,18 @@ Overriding `NextDueIn` also subscribes the job to the wake channel. Call
 the row the job cares about, to cut that job's current sleep short instead of waiting out the rest
 of the interval. A wake is a hint, never a guarantee: it can be missed if no worker is listening, so
 the job must still make progress on its own schedule regardless. A wake for a job that is not a
-fan out job is ignored with a Debug log line.
+fan out job is ignored with a Debug log line. A wake a job publishes for itself from inside its own
+`Process` is dropped without reaching Redis: the loop re-reads `NextDueIn` the moment the run ends,
+so the wake could only add a redundant tick here and a redundant enumerate on every other container.
+Waking a different job from inside a run goes through as usual.
+
+Two guards keep `Enumerate` and `NextDueIn` off the database's hot list. A tick that enumerated
+items and won none of their claims (every item was in flight on another container or backing off
+after a failure) sleeps the full `Interval` instead of asking `NextDueIn`, which would still answer
+"now" for those same items and re-enumerate them at the 250 ms floor for as long as they stayed due;
+a wake still cuts that sleep short, so new work is not delayed. And an `Enumerate` or `NextDueIn`
+slower than a second, or an `Enumerate` returning more than 10k items, logs a warning naming the
+job, since both run on every container on every tick and on every wake.
 
 ### Redis
 

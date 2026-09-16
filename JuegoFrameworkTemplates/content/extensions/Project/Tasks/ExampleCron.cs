@@ -12,7 +12,7 @@ namespace API.Tasks
             _logger = Log.ForContext("CronName", GetType().Name);
         }
 
-        public override Task Run()
+        public override Task Run(CancellationToken stopping)
         {
             try
             {

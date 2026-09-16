@@ -17,22 +17,37 @@ namespace JuegoFramework.Helpers
         private static bool _subscribed;
 
         /// <summary>
-        /// Publishes a wake for the given job. The name is the job's type name, for example
-        /// <c>nameof(MarchArrivals)</c>. Static and safe to call from a web instance; it touches
-        /// Redis only, never the cron runner.
+        /// The name of the job whose Run is in flight on the current async context, set by the cron
+        /// runner around each run. Flows into everything that run awaits, including its Process
+        /// calls, so a publish can tell that it is waking the very job it is running inside of.
+        /// </summary>
+        internal static readonly AsyncLocal<string?> RunningJob = new();
+
+        /// <summary>
+        /// Publishes a wake for the job with the given type name. Internal so that a typo cannot turn
+        /// a wake into a silent no-op: callers go through <see cref="PublishAsync{TJob}"/>.
         /// </summary>
         /// <param name="jobName">The type name of the cron job to wake.</param>
         /// <returns>A Task representing the asynchronous operation.</returns>
-        public static async Task PublishAsync(string jobName)
+        internal static async Task PublishAsync(string jobName)
         {
             ArgumentException.ThrowIfNullOrEmpty(jobName);
+
+            if (string.Equals(RunningJob.Value, jobName, StringComparison.Ordinal))
+            {
+                // A job waking itself from inside its own run: its loop re-reads NextDueIn the
+                // moment the run ends, so the wake could only add one more tick here and one
+                // enumerate on every other container for work this one is about to settle.
+                Log.Debug("Cron wake for {Name} skipped, published from inside its own run", jobName);
+                return;
+            }
 
             await Redis.Redis2.GetSubscriber().PublishAsync(RedisChannel.Literal(CronRedisKeys.WakeChannel), jobName);
         }
 
         /// <summary>
-        /// Publishes a wake for the given fan out job. Prefer this over the string overload: the
-        /// name comes from the type, so a typo cannot turn the wake into a no-op, and only a job
+        /// Publishes a wake for the given fan out job. Static and safe to call from a web instance;
+        /// it touches Redis only, never the cron runner. The name comes from the type, so only a job
         /// that can actually be woken is accepted.
         /// </summary>
         /// <typeparam name="TJob">The fan out job to wake.</typeparam>

@@ -45,7 +45,7 @@ public static class Application
     {
         if (Environment.GetEnvironmentVariable("MODE") == "CRON")
         {
-            await CronJobService.Start();
+            await CronJobService.Start(Global.ServiceProvider);
         }
     }
 

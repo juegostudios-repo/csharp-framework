@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Threading.Channels;
 using StackExchange.Redis;
 
@@ -24,16 +25,23 @@ namespace JuegoFramework.Helpers
         private static readonly TimeSpan RUNNING_LOCK_REFRESH = TimeSpan.FromSeconds(20);
         private static readonly TimeSpan MIN_SLOT_EXPIRY = TimeSpan.FromSeconds(60);
 
+        /// <summary>
+        /// A NextDueIn slower than this is warned about: it runs before every sleep and after every
+        /// wake on every container, so it must be an index lookup, not a scan.
+        /// </summary>
+        internal static readonly TimeSpan SLOW_NEXT_DUE_IN = TimeSpan.FromSeconds(1);
+
         // Compare and expire: the expiry is pushed out only while the key still holds this
         // instance's value, so a refresh cannot extend a lock another container has taken.
         private const string REFRESH_LOCK_SCRIPT = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('pexpire', KEYS[1], ARGV[2]) else return 0 end";
 
-        private readonly Func<Task> _run;
+        private readonly Func<CancellationToken, Task> _run;
         private readonly Func<DateTime, DateTime?> _nextTick;
         private readonly CancellationToken _stopping;
         private readonly Cron? _cron;
         private readonly bool _claimsSlot;
         private readonly Func<Task<TimeSpan?>>? _nextDueIn;
+        private readonly IFanOutJob? _fanOut;
         private readonly Channel<bool> _wakeSignal = Channel.CreateBounded<bool>(
             new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true });
         private readonly string _instanceId = Guid.NewGuid().ToString("N");
@@ -67,6 +75,7 @@ namespace JuegoFramework.Helpers
                 // A fan out job must tick on every container: its per item claims are what split
                 // the work. It answers when its next work is due, and a wake cuts its sleep short.
                 _nextDueIn = fanOut.NextDueIn;
+                _fanOut = fanOut;
                 CronWake.Register(JobName, SignalWake);
             }
             else
@@ -175,7 +184,18 @@ namespace JuegoFramework.Helpers
 
                 if (_nextDueIn is not null && delay > TimeSpan.Zero)
                 {
-                    delay = ClampSleep(await ReadNextDueIn(), delay);
+                    if (_fanOut!.LostEveryClaim)
+                    {
+                        // Every item this container enumerated is in flight elsewhere or backing
+                        // off after a failure. NextDueIn would answer "now" for those same items
+                        // and re-enumerate them at the sleep floor for as long as they stay due,
+                        // so keep the interval. New work still arrives as a wake.
+                        Log.Debug("Cron {Name} won none of its items, sleeping its interval", JobName);
+                    }
+                    else
+                    {
+                        delay = ClampSleep(await ReadNextDueIn(), delay);
+                    }
                 }
 
                 // Logged after the clamp: a nearer due time pulls the tick in ahead of the
@@ -228,7 +248,16 @@ namespace JuegoFramework.Helpers
         {
             try
             {
-                return await _nextDueIn!();
+                var started = Stopwatch.GetTimestamp();
+                var nextDueIn = await _nextDueIn!();
+                var took = Stopwatch.GetElapsedTime(started);
+
+                if (took > SLOW_NEXT_DUE_IN)
+                {
+                    Log.Warning("Cron {Name} NextDueIn took {Took}. It runs before every sleep on every container, so index the query it makes", JobName, took);
+                }
+
+                return nextDueIn;
             }
             catch (Exception e)
             {
@@ -451,10 +480,16 @@ namespace JuegoFramework.Helpers
         {
             Volatile.Write(ref _running, 1);
             _lastRunStartedUtc = DateTime.UtcNow;
+            CronWake.RunningJob.Value = JobName;
 
             try
             {
-                await _run();
+                await _run(_stopping);
+            }
+            catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
+            {
+                // The job observed the shutdown token and stopped where it was told to.
+                Log.Information("Cron {Name} run stopped early, the process is shutting down", JobName);
             }
             catch (Exception e)
             {
@@ -462,6 +497,7 @@ namespace JuegoFramework.Helpers
             }
             finally
             {
+                CronWake.RunningJob.Value = null;
                 Volatile.Write(ref _running, 0);
             }
 
@@ -479,7 +515,9 @@ namespace JuegoFramework.Helpers
 
             try
             {
-                if (_cron is null)
+                // A fan out tick is as long as its items: its Interval caps the sleep between ticks
+                // and defaults the item lease, and the lease warning covers a slow item.
+                if (_cron is null || _fanOut is not null)
                 {
                     return;
                 }

@@ -1,4 +1,5 @@
 using JuegoFramework.Helpers;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace JuegoFrameworkTests
 {
@@ -102,9 +103,32 @@ namespace JuegoFrameworkTests
         }
 
         [Fact]
+        public void Discovery_Constructs_A_Job_From_The_Service_Provider()
+        {
+            var counter = new Counter { Count = 42 };
+            var services = new ServiceCollection().AddSingleton(counter).BuildServiceProvider();
+
+            var jobs = CronJobService.DiscoverJobs(typeof(CronRunnerTests).Assembly, services);
+
+            var job = Assert.Single(jobs.OfType<DependentCron>());
+            Assert.Same(counter, job.Counter);
+        }
+
+        [Fact]
+        public void Discovery_Names_A_Job_Whose_Dependency_The_Provider_Cannot_Supply()
+        {
+            var services = new ServiceCollection().BuildServiceProvider();
+
+            var e = Assert.Throws<InvalidOperationException>(() => CronJobService.DiscoverJobs(typeof(CronRunnerTests).Assembly, services));
+
+            Assert.Contains(nameof(DependentCron), e.Message);
+        }
+
+        [Fact]
         public void Discovery_Skips_Abstract_Types_And_Finds_Subclasses_Of_A_Generic_Base()
         {
-            var jobs = CronJobService.DiscoverJobs(typeof(CronRunnerTests).Assembly);
+            var services = new ServiceCollection().AddSingleton<Counter>().BuildServiceProvider();
+            var jobs = CronJobService.DiscoverJobs(typeof(CronRunnerTests).Assembly, services);
             var types = jobs.Select(job => job.GetType()).ToList();
 
             Assert.DoesNotContain(typeof(AbstractIntermediateCron), types);
@@ -217,7 +241,7 @@ namespace JuegoFrameworkTests
 
             public int CallCount => Volatile.Read(ref _callCount);
 
-            public override Task Run()
+            public override Task Run(CancellationToken stopping)
             {
                 if (Interlocked.Increment(ref _callCount) == 1)
                 {
@@ -240,7 +264,7 @@ namespace JuegoFrameworkTests
 
             public bool Finished => Volatile.Read(ref _finished) == 1;
 
-            public override async Task Run()
+            public override async Task Run(CancellationToken stopping)
             {
                 Started.TrySetResult();
                 await Gate.Task;
@@ -264,7 +288,7 @@ namespace JuegoFrameworkTests
 
             public bool WasRun => Volatile.Read(ref _wasRun) == 1;
 
-            public override Task Run()
+            public override Task Run(CancellationToken stopping)
             {
                 Volatile.Write(ref _wasRun, 1);
                 return Task.CompletedTask;
@@ -279,7 +303,7 @@ namespace JuegoFrameworkTests
 
             public bool WasRun => Volatile.Read(ref _wasRun) == 1;
 
-            public override Task Run()
+            public override Task Run(CancellationToken stopping)
             {
                 Volatile.Write(ref _wasRun, 1);
                 return Task.CompletedTask;
@@ -291,7 +315,7 @@ namespace JuegoFrameworkTests
         {
             public override TimeSpan Interval => TimeSpan.FromHours(1);
 
-            public override Task Run() => Task.CompletedTask;
+            public override Task Run(CancellationToken stopping) => Task.CompletedTask;
         }
 
         // A never scheduled base, only here so discovery has an abstract intermediate to skip.
@@ -302,7 +326,7 @@ namespace JuegoFrameworkTests
 
         public sealed class ConcreteBelowAbstractCron : AbstractIntermediateCron
         {
-            public override Task Run() => Task.CompletedTask;
+            public override Task Run(CancellationToken stopping) => Task.CompletedTask;
         }
 
         // Stands in for the FanOutCron<TItem> base a later task adds.
@@ -310,20 +334,37 @@ namespace JuegoFrameworkTests
         {
             public override TimeSpan Interval => TimeSpan.FromHours(1);
 
-            public override Task Run() => Task.CompletedTask;
+            public override Task Run(CancellationToken stopping) => Task.CompletedTask;
         }
 
         public sealed class GenericIntermediateCron : GenericBase<long>
         {
         }
 
+        /// <summary>
+        /// Has no parameterless constructor, so discovery can only build it through a provider.
+        /// </summary>
+        public sealed class DependentCron : Cron
+        {
+            public DependentCron(Counter counter)
+            {
+                Counter = counter;
+            }
+
+            public Counter Counter { get; }
+
+            public override TimeSpan Interval => TimeSpan.FromHours(1);
+
+            public override Task Run(CancellationToken stopping) => Task.CompletedTask;
+        }
+
         public sealed class IdleFanOut : FanOutCron<int>
         {
             public override TimeSpan Interval => TimeSpan.FromHours(1);
 
-            public override Task<List<int>> Enumerate() => Task.FromResult(new List<int>());
+            public override Task<List<int>> Enumerate(CancellationToken stopping) => Task.FromResult(new List<int>());
 
-            public override Task Process(int item) => Task.CompletedTask;
+            public override Task Process(int item, CancellationToken stopping) => Task.CompletedTask;
         }
     }
 }
@@ -336,6 +377,6 @@ namespace JuegoFrameworkTests.Clash
     {
         public override TimeSpan Interval => TimeSpan.FromHours(1);
 
-        public override Task Run() => Task.CompletedTask;
+        public override Task Run(CancellationToken stopping) => Task.CompletedTask;
     }
 }

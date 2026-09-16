@@ -11,8 +11,16 @@ namespace JuegoFramework.Helpers
     /// The contract is at least once: <see cref="Enumerate"/> returns only items that still need
     /// work, <see cref="Process"/> must be safe to repeat, and an item can be processed twice when
     /// its processing outlives <see cref="ItemLease"/>, or when another container claims it right
-    /// after a successful run released its claim.
+    /// after a successful run released its claim. A job whose enumeration cannot tell "done" from
+    /// "still needs work" records the last pass on the item, a timestamp column for instance, and
+    /// enumerates on that.
     /// Above roughly 100k items per tick, shard the job rather than enumerate everything.
+    /// </para>
+    /// <para>
+    /// <see cref="Cron.Interval"/> is the cap on the sleep between ticks and the default
+    /// <see cref="ItemLease"/>. It is not a bound on a tick's duration: a tick over many items may
+    /// legitimately outlast it, so the single runner's "run longer than its interval" warning does
+    /// not apply here; the per item lease warning covers the slow case.
     /// </para>
     /// </summary>
     /// <typeparam name="TItem">The type of one unit of work.</typeparam>
@@ -39,16 +47,21 @@ namespace JuegoFramework.Helpers
         /// Returns the items that still need work this tick. An exception here is logged by the
         /// runner and ends the tick; nothing is claimed.
         /// </summary>
+        /// <param name="stopping">Cancelled when the process is shutting down.</param>
         /// <returns>The items to process.</returns>
-        public abstract Task<List<TItem>> Enumerate();
+        public abstract Task<List<TItem>> Enumerate(CancellationToken stopping);
 
         /// <summary>
         /// Processes one item. Must be safe to repeat: the same item can come back on a later tick,
         /// and can be taken by another container once its lease lapses.
         /// </summary>
         /// <param name="item">The item to process.</param>
+        /// <param name="stopping">Cancelled when the process is shutting down. A long item passes
+        /// it to the work it awaits, or polls it, so that the worker can drain. An item that throws
+        /// <see cref="OperationCanceledException"/> once this is cancelled has its claim released
+        /// rather than counted as a failure, so the next tick anywhere takes it straight away.</param>
         /// <returns>A Task representing the asynchronous operation.</returns>
-        public abstract Task Process(TItem item);
+        public abstract Task Process(TItem item, CancellationToken stopping);
 
         /// <summary>
         /// How many items this container processes at once. One by default. Above one,
@@ -76,41 +89,34 @@ namespace JuegoFramework.Helpers
         public virtual TimeSpan ItemLease => Interval;
 
         /// <summary>
-        /// Whether a finished item keeps its claim for the rest of <see cref="ItemLease"/>. False by
-        /// default: a successful <see cref="Process"/> releases the claim straight away, which is
-        /// right when <see cref="Enumerate"/> can tell "done" from "still needs work" on its own,
-        /// since the item is then free for the next tick the moment it is finished. The contract is
-        /// then at least once, not exactly once: when several containers enumerate at about the same
-        /// time, one can claim an item the other has just finished and released, and process it
-        /// again, so <see cref="Process"/> must be safe to repeat. Set this to true when the
-        /// enumeration cannot tell the difference, or when the lease must guarantee one pass per
-        /// cycle, for instance a regeneration pass with no last-run timestamp to read: the lease
-        /// itself is then the "already done this cycle" marker and is left to expire.
-        /// A failing <see cref="Process"/> always keeps the claim, so a broken item backs off for
-        /// <see cref="ItemLease"/> instead of being retried in a tight loop.
-        /// </summary>
-        public virtual bool HoldClaimAfterSuccess => false;
-
-        /// <summary>
         /// Snapshots everything the shared runner needs for one tick.
         /// </summary>
-        internal FanOutJobContext<TItem> BuildContext() => new(
+        internal FanOutJobContext<TItem> BuildContext(CancellationToken stopping) => new(
             GetType().Name,
             _instanceId,
-            Stopping,
+            stopping,
             Concurrency,
             ItemLease,
-            HoldClaimAfterSuccess,
             Enumerate,
             Process,
             ItemKey);
+
+        private bool _lostEveryClaim;
+
+        bool IFanOutJob.LostEveryClaim => _lostEveryClaim;
 
         /// <summary>
         /// Enumerates, claims and processes. Implemented by the base class; override
         /// <see cref="Enumerate"/> and <see cref="Process"/> instead.
         /// </summary>
+        /// <param name="stopping">Cancelled when the process is shutting down. No new item is
+        /// started once it is, and it is handed to every <see cref="Process"/> call.</param>
         /// <returns>A Task representing the asynchronous operation.</returns>
-        public sealed override Task Run() => FanOutRunner.RunAsync(BuildContext());
+        public sealed override async Task Run(CancellationToken stopping)
+        {
+            _lostEveryClaim = false;
+            _lostEveryClaim = await FanOutRunner.RunAsync(BuildContext(stopping));
+        }
     }
 
     /// <summary>
@@ -126,6 +132,14 @@ namespace JuegoFramework.Helpers
         /// See <see cref="FanOutCron{TItem}.NextDueIn"/>.
         /// </summary>
         internal Task<TimeSpan?> NextDueIn();
+
+        /// <summary>
+        /// True when the last tick enumerated items and won none of their claims. Every item was
+        /// then either in flight on another container or backing off after a failure, so the runner
+        /// sleeps the full interval instead of asking <see cref="NextDueIn"/>, which would still
+        /// answer "now" for those very items. A wake still cuts that sleep short.
+        /// </summary>
+        internal bool LostEveryClaim { get; }
     }
 
     /// <summary>
@@ -138,9 +152,8 @@ namespace JuegoFramework.Helpers
         CancellationToken Stopping,
         int Concurrency,
         TimeSpan ItemLease,
-        bool HoldClaimAfterSuccess,
-        Func<Task<List<TItem>>> Enumerate,
-        Func<TItem, Task> Process,
+        Func<CancellationToken, Task<List<TItem>>> Enumerate,
+        Func<TItem, CancellationToken, Task> Process,
         Func<TItem, string> ItemKey);
 
     /// <summary>
@@ -151,12 +164,37 @@ namespace JuegoFramework.Helpers
         private static readonly TimeSpan MIN_ITEM_LEASE = TimeSpan.FromSeconds(1);
 
         /// <summary>
+        /// An Enumerate slower than this is warned about: it runs on every container on every tick
+        /// and on every wake, so a slow one is the first thing to show up on the database.
+        /// </summary>
+        internal static readonly TimeSpan SLOW_ENUMERATE = TimeSpan.FromSeconds(1);
+
+        /// <summary>
+        /// An Enumerate returning more items than this is warned about: every item is one Redis
+        /// claim per container per tick, and the documented guidance is to shard well before 100k.
+        /// </summary>
+        internal const int LARGE_ENUMERATION = 10_000;
+
+        /// <summary>
         /// Runs one fan out tick. An exception from Enumerate propagates to the cron runner, which
         /// logs it; a per item exception is logged and does not stop the other items.
         /// </summary>
-        internal static async Task RunAsync<TItem>(FanOutJobContext<TItem> job)
+        /// <returns>True when items were enumerated and none of their claims was won.</returns>
+        internal static async Task<bool> RunAsync<TItem>(FanOutJobContext<TItem> job)
         {
-            var items = await job.Enumerate();
+            var enumerateStarted = Stopwatch.GetTimestamp();
+            var items = await job.Enumerate(job.Stopping);
+            var enumerateTook = Stopwatch.GetElapsedTime(enumerateStarted);
+
+            if (enumerateTook > SLOW_ENUMERATE)
+            {
+                Log.Warning("Cron {Name} Enumerate took {Took} for {Count} items. It runs on every container on every tick and wake, so index the query it makes", job.JobName, enumerateTook, items.Count);
+            }
+
+            if (items.Count > LARGE_ENUMERATION)
+            {
+                Log.Warning("Cron {Name} enumerated {Count} items in one tick, each one a Redis claim per container. Shard the job before it reaches 100k", job.JobName, items.Count);
+            }
 
             if (items.Count == 0)
             {
@@ -169,7 +207,7 @@ namespace JuegoFramework.Helpers
                     0,
                     0,
                     0);
-                return;
+                return false;
             }
 
             var lease = job.ItemLease;
@@ -197,7 +235,16 @@ namespace JuegoFramework.Helpers
 
                     try
                     {
-                        await job.Process(winner.Item);
+                        await job.Process(winner.Item, token);
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    {
+                        // The worker is draining and the item stopped where it was told to. Not a
+                        // broken item, so its claim must not back off for the lease: release it, and
+                        // the next tick anywhere takes it again.
+                        Log.Information("Cron {Name} item {ItemKey} stopped early, the process is shutting down", job.JobName, winner.Key);
+                        await TryReleaseAsync(job, winner);
+                        return;
                     }
                     catch (Exception e)
                     {
@@ -215,24 +262,9 @@ namespace JuegoFramework.Helpers
                         Log.Warning("Cron {Name} item {ItemKey} took {Took} against a lease of {Lease}, another container may have processed it too", job.JobName, winner.Key, took, lease);
                     }
 
-                    if (job.HoldClaimAfterSuccess)
+                    if (await TryReleaseAsync(job, winner))
                     {
-                        return;
-                    }
-
-                    try
-                    {
-                        // Compare and delete on this claim's own value, which is unique per item and
-                        // per tick, so a release can only ever delete the claim it made. A claim
-                        // another container, another tick or a retry made is left alone.
-                        await Redis.ReleaseLockAsync(winner.Key, winner.ClaimValue);
                         Interlocked.Increment(ref released);
-                    }
-                    catch (Exception e)
-                    {
-                        // The item is processed either way; the claim just lingers until its lease
-                        // lapses, so this is not an item failure.
-                        Log.Warning(e, "Cron {Name} processed item {ItemKey} but could not release its claim", job.JobName, winner.Key);
                     }
                 });
             }
@@ -249,6 +281,30 @@ namespace JuegoFramework.Helpers
                 items.Count - winners.Count,
                 failed,
                 released);
+
+            return winners.Count == 0;
+        }
+
+        /// <summary>
+        /// Releases one claim. Compare and delete on this claim's own value, which is unique per
+        /// item and per tick, so a release can only ever delete the claim it made; a claim another
+        /// container, another tick or a retry made is left alone. A Redis failure here is a warning,
+        /// not an item failure: the item is processed either way and the claim lingers until its
+        /// lease lapses.
+        /// </summary>
+        /// <returns>True when the claim was released.</returns>
+        private static async Task<bool> TryReleaseAsync<TItem>(FanOutJobContext<TItem> job, ItemClaim<TItem> claim)
+        {
+            try
+            {
+                await Redis.ReleaseLockAsync(claim.Key, claim.ClaimValue);
+                return true;
+            }
+            catch (Exception e)
+            {
+                Log.Warning(e, "Cron {Name} processed item {ItemKey} but could not release its claim", job.JobName, claim.Key);
+                return false;
+            }
         }
 
         /// <summary>
